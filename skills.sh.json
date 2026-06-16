@@ -1,0 +1,21 @@
+{
+  "$schema": "https://skills.sh/schemas/skills.sh.schema.json",
+  "notGrouped": "bottom",
+  "groupings": [
+    {
+      "title": "Knowledge Management",
+      "description": "Skills for persistent knowledge bases, research notebooks, and long-lived Markdown wikis.",
+      "skills": ["llm-wiki"]
+    },
+    {
+      "title": "Agent Workflows",
+      "description": "Skills for structured implementation processes and prototype-to-product workflows.",
+      "skills": ["zafir-development-process", "port-claude-design-prototype"]
+    },
+    {
+      "title": "ERP Integrations",
+      "description": "Skills for read-only business system and ERP data access.",
+      "skills": ["vendus-erp-api"]
+    }
+  ]
+}
