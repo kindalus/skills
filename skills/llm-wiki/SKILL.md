@@ -1,6 +1,6 @@
 ---
 name: llm-wiki
-description: Build and maintain OKF-backed LLM wikis: raw sources are converted into auditable markdown, then ingested into a fully OKF-compliant wiki that compounds knowledge through summaries, cross-references, filed queries, and linting.
+description: "Build and maintain OKF-backed LLM wikis: raw sources are converted into auditable markdown, then ingested into a fully OKF-compliant wiki that compounds knowledge through summaries, cross-references, filed queries, and linting."
 license: MIT
 ---
 
