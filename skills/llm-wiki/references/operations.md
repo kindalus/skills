@@ -256,11 +256,14 @@ A query answers a user question from the accumulated wiki. It starts in `wiki/`,
 
 1. **Read the local schema** to understand page types and conventions.
 2. **Read `wiki/index.md`** to find candidate pages.
-3. **Read candidate pages in full.** Do not rely on snippets.
-4. **Follow cross-references** to related pages.
-5. **Consult `converted/` only when needed.** If the wiki does not contain enough detail, use source-page frontmatter/body links to locate relevant converted files. Never read `raw/` directly.
-6. **Synthesize an answer** with citations to wiki pages. If you used details from `converted/` that are not yet represented in the wiki, cite the relevant source page and update/file wiki content as described below.
-7. **File substantive answers by default** in `wiki/derived/`, unless the user explicitly says not to.
+3. **Prefer applicable derived pages.** If the index identifies one or more derived pages applicable to the question, read the most directly applicable derived page before any non-derived candidate page.
+4. **Stop when the derived answer is complete.** If that page fully supports the answer and its citations, stop retrieval and answer from it. Do not read its `source_pages` or other pages merely to reconfirm information already contained there.
+5. **Read other candidate pages only when strictly necessary.** Expand beyond the derived page only to fill a specific missing detail, resolve ambiguity or conflicting evidence, check a potentially stale claim, repair broken citation lineage, or answer a materially different scope.
+6. **Read selected candidate pages in full.** Do not rely on snippets.
+7. **Follow cross-references only as needed** for the specific gap that justified further retrieval.
+8. **Consult `converted/` only when needed.** If the wiki does not contain enough detail, use source-page frontmatter/body links to locate relevant converted files. Never read `raw/` directly.
+9. **Synthesize an answer** with citations to wiki pages. If you used details from `converted/` that are not yet represented in the wiki, cite the relevant source page and update/file wiki content as described below.
+10. **File substantive answers by default** in `wiki/derived/`, unless the user explicitly says not to.
 
 Do not file:
 
