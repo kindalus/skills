@@ -16,7 +16,7 @@ This is a recommendation, not a rule of the Zafir process. It is offered to the 
 - Application services (use cases) orchestrate the domain; controllers, handlers, and CLIs stay thin.
 - Persistence, HTTP, UI, and external APIs are adapters at the seams recorded in `architecture.md`.
 - Domain events: every state change that matters to the business is raised by its aggregate as a named, past-tense domain event; side effects (notifications, projections, integrations, other aggregates) react to events rather than being called from inside the aggregate.
-- The default event dispatcher is a synchronous in-memory one in the application layer, registered as a placeholder under [SLICE-DISCIPLINE.md](SLICE-DISCIPLINE.md) *Contracts and placeholders*. Outbox, broker, and asynchronous delivery are tier-3 slices — never built in the first slice that raises an event.
+- The default event dispatcher is a synchronous in-memory one in the application layer, registered as a placeholder under [SLICE-DISCIPLINE.md](SLICE-DISCIPLINE.md) *Contracts and placeholders*. Outbox, broker, and asynchronous delivery are infrastructure-tier slices — never built in the first slice that raises an event.
 - No context map required.
 
 ## Full DDD

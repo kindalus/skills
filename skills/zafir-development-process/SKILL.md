@@ -91,7 +91,7 @@ Inside red → green, one test passes. Elsewhere, every applicable check passes 
 
 ### Commits are the markers
 
-This process authorizes exactly the **Commit:** markers in its files, at their moments; ask before any other commit. Invoking this skill is the user's request for those marker commits: a standing instruction to commit only on demand (`CLAUDE.md`, `AGENTS.md`, memory) is met by them and still forbids every other commit. Without marker commits, `base`, phase SHAs and Z3 have no evidence; when the user withholds them, say so at Step 0 and record the choice (precedence rule 1). Stage exactly the files the phase produced (check `git status`), never user work; no deferred catch-all commit. Slice commits carry the trailers `Slice: <id>` and `Phase: 1|2|3|integration`.
+This process authorizes exactly the **Commit:** markers in its files, at their moments; ask before any other commit. Invoking this skill is the user's request for those marker commits: a standing instruction to commit only on demand (`CLAUDE.md`, `AGENTS.md`, memory) is met by them and still forbids every other commit. Without marker commits, `base`, phase SHAs and Z3 have no evidence; when the user withholds them, say so at Step 0 and record the choice (precedence rule 1). Stage exactly the files the phase produced (check `git status`), never user work; no deferred catch-all commit. Slice commits carry the trailers `Slice: <id>` and `Phase: 1|2|3|integration`, which are their evidence (REGISTER-SCHEMA Z7).
 
 ## Risk lanes
 
@@ -116,7 +116,6 @@ Above this order sit the **operating environment** and **hard constraints** (leg
 4. **A step** beats a general section; a remaining conflict is a defect to surface.
 5. **Repository instructions** (`AGENTS.md`, `CLAUDE.md`, CI) beat defaults on commands, layout, commit format and tooling; conflicts with steps go to the user.
 6. **Wiki structure** belongs to `llm-wiki`, **spec structure** to this process.
-7. **Commits** occur only at the markers.
 
 ## Step 0 — Apply this skill
 

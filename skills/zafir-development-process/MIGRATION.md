@@ -11,7 +11,10 @@ Read when migrating a register, adopting an opt-in schema option, adopting a pro
 | Feature closure fills the feature row's `evidence.commits` and `evidence.tests` (invariants 8–9) | Features closing after adoption; closed features are not reopened |
 | Invoking the skill authorizes the marker commits; Step 0 states the commits it will make | Apply by default |
 | Register template (`assets/STATUS.template.json`) and validator (`scripts/validate_register.py`); `placeholders.reuses` and `replaces` are lists of names | New registers start from the template; existing v3 registers may be validated as they are |
-| *Terms* in SKILL.md; the 5.4 and phase-2 register rows name stages and green steps instead of cycles; moved-section stubs replaced by *Moved sections* below | None |
+| *Terms* in SKILL.md; the 5.4 and phase-2 register rows name stages and green steps instead of cycles; moved-section stubs replaced by *Moved sections* below; the precedence list no longer repeats the commit rule (*Commits are the markers* holds it) | None |
+| Z7 (phase evidence by commit trailer) is the default: the template declares it at `3.1.0`; no phase SHA is appended after the fact | New registers start with it; a `3.0.0` register adopts it by recorded decision (*Opting into 3.1.0*), recommended, and appends phase SHAs until then |
+| Slice approval decks always come from the project's deterministic renderer; `html-slide-deck` only generates the other decks | From the next slice approval; decks already approved stay valid |
+| The validator requires the `governingContext` assessment on every row and reports malformed fields instead of crashing | A register lacking `governingContext` adds it (`pending`, or `resolved` with references) in its next authorized commit |
 
 ## Process revision 2026-10-14
 
@@ -46,12 +49,12 @@ Only when the user chooses to migrate (a declared compatibility profile never re
 1. Pause register writers, keep a recoverable copy, and inspect the source version, custom columns, rules, validators and consumers; update incompatible consumers first. A newer or custom schema needs its own inspected policy; never downgrade it.
 2. Preserve ids, row order, states, qualifiers, dates, evidence, notes and unrelated extensions. Set `parallelAllowed: false` on every slice and investigation; keep `plannedFiles` or use `[]`. A past pair approval does not authorize concurrency with other slices.
 3. Keep every dependency initially. Remove a predecessor or fork-join edge only when approved specs prove it artificial, in an approved revision that records each edge and reason; ambiguous edges go to the user.
-4. Record the old `parallelWith` values in a dated note, remove that field, replace the rules with Z1–Z6, declare `parallelAllowed` and `plannedFiles`, and set `3.0.0`. Never reinterpret completed slices or erase historical approvals and SHAs.
-5. Recompute readiness, validate the invariants and Z1–Z6, report changed ids and blockers, and commit in the next authorized phase commit. On failure publish nothing and keep writers paused.
+4. Record the old `parallelWith` values in a dated note, remove that field, replace the rules with Z1–Z7, declare `parallelAllowed` and `plannedFiles`, and set `3.1.0`. Never reinterpret completed slices or erase historical approvals and SHAs.
+5. Recompute readiness, validate the invariants and Z1–Z7, report changed ids and blockers, and commit in the next authorized phase commit. On failure publish nothing and keep writers paused.
 
 ## Opting into 3.1.0
 
-Adopt `areas`, Z7 or Z8 (REGISTER-SCHEMA *Opt-in options*) one at a time by recorded decision: declare the column or rule, set `3.1.0`, and update validators and consumers in the same commit. For Z8, generate the aggregate and verify it equals the previous register byte for byte (or field for field) before switching writers.
+Adopt `areas`, Z7 or Z8 (REGISTER-SCHEMA *Opt-in options*) one at a time by recorded decision: declare the column or rule, set `3.1.0`, and update validators and consumers in the same commit. Adopting Z7 keeps the phase SHAs already in `evidence.commits`: they remain the evidence of commits made before adoption, with or without trailers. For Z8, generate the aggregate and verify it equals the previous register byte for byte (or field for field) before switching writers.
 
 ## Compatibility profiles
 
@@ -59,7 +62,7 @@ A register at an earlier or custom schema version stays valid indefinitely under
 
 - **Declaration:** the register's `summary` or a rule, or the repository instruction that maps the register's location, names the profile. Step 0 detects it (STATUS-REGISTER *Reading the register*).
 - **Operation:** the safe update procedure, readiness gates, invariants and transitions apply through the mappings below. Write only the fields the register declares, in its own vocabulary and rules; never add Zafir columns, bump `schemaVersion` or normalize values unasked.
-- **Absent Zafir fields** keep their meaning outside the row: `parallelAllowed` → the project's recorded concurrency decision; `plannedFiles` and `areas` → the slice spec or a project envelope file; `base` and phase SHAs → the spec, `evidence.commits` or commit trailers; `seams`, `placeholders` and the lane → the slice spec; `kind` and `feature` → the id and spec path. Z1–Z6 apply to those sources.
+- **Absent Zafir fields** keep their meaning outside the row: `parallelAllowed` → the project's recorded concurrency decision; `plannedFiles` and `areas` → the slice spec or a project envelope file; `base` and phase SHAs → the spec, `evidence.commits` or commit trailers; `seams`, `placeholders` and the lane → the slice spec; `kind` and `feature` → the id and spec path. Z1–Z7 apply to those sources.
 
 | Legacy shape | Read as | Portable field, if the user chooses to normalize |
 | --- | --- | --- |
@@ -79,7 +82,9 @@ A project document citing a former section finds it here:
 | Former section | Now |
 | --- | --- |
 | SPEC-LAYOUT *Rows* | REGISTER-SCHEMA *Zafir profile* › *Rows* |
-| SPEC-LAYOUT *Zafir extension fields, declared in `columns`* | REGISTER-SCHEMA *Zafir extension fields* and *Rules Z1–Z6* (Z6 governs permission and envelope) |
+| SPEC-LAYOUT *Zafir extension fields, declared in `columns`* | REGISTER-SCHEMA *Zafir extension fields* and *Rules Z1–Z7* (Z6 governs permission and envelope) |
+| REGISTER-SCHEMA *Rules Z1–Z6*; *Opt-in options* › Z7 | REGISTER-SCHEMA *Rules Z1–Z7* |
+| SKILL.md *Precedence and exceptions* rule 7 (commits) | SKILL.md *Commits are the markers* |
 | SPEC-LAYOUT *Zafir register version and migration* | this file |
 | SPEC-LAYOUT *Admission and readiness* | CONCURRENCY *Admission*; REGISTER-SCHEMA *Readiness gates* |
 | SPEC-LAYOUT *How the process writes the register*, *Reading the register* | STATUS-REGISTER, same titles |

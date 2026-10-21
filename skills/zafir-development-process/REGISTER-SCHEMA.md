@@ -1,6 +1,6 @@
 # Status register schema
 
-Read when creating, validating or extending a register. A new register starts from `assets/STATUS.template.json`; `scripts/validate_register.py` checks what a file can show of the invariants, Z2–Z6 and the `areas` option, and lists what it cannot. Day-to-day operation (authority, safe updates, transitions, queries) lives in [STATUS-REGISTER.md](STATUS-REGISTER.md); migration and compatibility profiles in [MIGRATION.md](MIGRATION.md).
+Read when creating, validating or extending a register. A new register starts from `assets/STATUS.template.json`; `scripts/validate_register.py` checks what a file can show of the invariants, the required `governingContext` assessment, Z2–Z6 and the `areas` option, and lists what it cannot. Day-to-day operation (authority, safe updates, transitions, queries) lives in [STATUS-REGISTER.md](STATUS-REGISTER.md); migration and compatibility profiles in [MIGRATION.md](MIGRATION.md).
 
 The register answers separate questions: which work items exist, what each depends on, whether its spec is settled, whether its implementation is finished or blocked, and whether spec or implementation work may start now. The contract is domain-neutral; projects may call items slices, tasks or changes and add policy assessments.
 
@@ -109,21 +109,21 @@ Declare every added field in `columns` with enums for closed vocabularies; keep 
 
 A placeholder is **active** when some row introduces it, no `done` row replaces it, and no row keeps it. It is derived, never stored.
 
-### Rules Z1–Z6
+### Rules Z1–Z7
 
 - **Z1** — Table order is the decided default priority. Without concurrency a slice starts only as its feature's next unfinished slice; with `parallelAllowed`, admission follows CONCURRENCY.md. Concurrent execution implies no predecessor or join edge. Each slice waits only for its own dependencies, authoritatively `done`. Removing an edge needs evidence and an approved plan revision.
 - **Z2** — At most one feature row has `architecture.state = pending-change`.
-- **Z3** — `done` requires `base`, `verification passed`, a recorded review, and every earlier phase commit in `evidence.commits` (or found by trailer under Z7). The completing commit proves itself through Git history; its SHA is appended at the next register commit. A slice is authoritatively `done` only with its integration commit and combined-tree evidence; a branch's `done` releases nothing.
+- **Z3** — `done` requires `base`, `verification passed`, a recorded review, and every earlier phase commit: found by trailer under Z7, otherwise listed in `evidence.commits`. The completing commit proves itself through Git history (without Z7, its SHA is appended at the next register commit). A slice is authoritatively `done` only with its integration commit and combined-tree evidence; a branch's `done` releases nothing.
 - **Z4** — A security placeholder still active at feature closure is in `kept` with a decision covering deployable builds, possible only for builds holding test data.
 - **Z5** — A feature is `done` only when its slices are `done` or `won't-do` and none of its placeholders is active without a `kept` decision.
 - **Z6** — `parallelAllowed: true` requires recorded user authorization (per slice, or the project's concurrency decision cited in the Step 4 note) and nonempty, unique, normalized `plannedFiles` without globs. Overlapping envelopes do not block admission; CONCURRENCY.md's serial rules do. File disjointness never proves independence.
+- **Z7** — Phase evidence comes from Git: slice commits carry the trailers `Slice: <id>` and `Phase: 1|2|3|integration`; `evidence.commits` holds `base`, and Z3 finds the other phase commits with `git log --grep "^Slice: <id>$"`. No SHA is appended after the fact. The template declares it (`3.1.0`); a `3.0.0` register adopts it by recorded decision (MIGRATION *Opting into 3.1.0*) and appends phase SHAs until then.
 
 ## Opt-in options (schema 3.1.0)
 
-Each option is independent and adopted by recorded project decision: declare its column or rule and bump `schemaVersion` to `3.1.0`. Registers at `3.0.0` and declared compatibility profiles remain valid indefinitely.
+Each option is independent and adopted by recorded project decision: declare its column or rule and bump `schemaVersion` to `3.1.0` (a register created from the template is already there, with Z7). Registers at `3.0.0` and declared compatibility profiles remain valid indefinitely.
 
 - **`areas`** (column, slice and investigation): repository-relative directories ending in `/`, each covering its direct files only (non-recursive). They extend the envelope forecast: new paths inside an area need no approval.
-- **Z7 — phase evidence from Git:** slice commits carry the trailers `Slice: <id>` and `Phase: 1|2|3|integration`; `evidence.commits` holds `base`, and Z3 finds the other phase commits with `git log --grep "^Slice: <id>$"`. No SHA is appended after the fact.
 - **Z8 — partitioned storage:** rows and notes live in per-id files under a declared directory; a project script generates the aggregate register, which is never hand-edited and is what validators and queries read. The logical register remains one, merged by `id`.
 
 ## Completion criterion

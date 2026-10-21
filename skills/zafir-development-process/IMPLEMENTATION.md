@@ -25,7 +25,7 @@ verify: every test maps to a scenario, and every scenario to a task.
 3. **The battery:** write the tests of every scenario of the slice at their seams, run the whole set once and keep the **RED log**, classifying each test:
    - **causal red** — fails for its own reason (its assertion, a missing behaviour): the target state;
    - **wrong red** — fails to compile or for another reason: fix the test and re-run;
-   - **NON-CAUSAL** — the plumbing still cannot bring it to its target: it stays, never counts as its own RED, and gets an omission mutant at its green step;
+   - **non-causal** — the plumbing still cannot bring it to its target: it stays, never counts as its own RED, and gets an omission mutant at its green step;
    - **already green** — recorded; its fact gets an omission mutant at its green step.
 
    verify: no wrong red remains, and every test appears in the RED log with its class.

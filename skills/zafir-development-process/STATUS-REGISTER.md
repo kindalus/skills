@@ -1,6 +1,6 @@
 # Status register — operation
 
-Read before any register read or write. The schema — vocabulary, readiness gates, invariants, Zafir fields, rules Z1–Z6 and the opt-in Z7–Z8 — is in [REGISTER-SCHEMA.md](REGISTER-SCHEMA.md).
+Read before any register read or write. The schema — vocabulary, readiness gates, invariants, Zafir fields, rules Z1–Z7 and the opt-in `areas` and Z8 — is in [REGISTER-SCHEMA.md](REGISTER-SCHEMA.md).
 
 ## Authority
 
@@ -23,20 +23,20 @@ Reject the update when an approval, assessment or proof is missing; state what i
 
 | Moment | Row | Change |
 | --- | --- | --- |
-| Step 2, first iteration | feature | Create the register if absent, from `assets/STATUS.template.json` (`3.0.0`, Zafir columns, rules, vocabularies; fill `title` and `summary`). Row: `spec proposed`, `implementation not-started`, `verification undefined`, `specifiable true`, `implementable false`, `governingContext pending`, `design proposed`, `architecture not-yet-created` or `consistent`, `nextAction` "brainstorm" |
+| Step 2, first iteration | feature | Create the register if absent, from `assets/STATUS.template.json` (`3.1.0`, Zafir columns, rules with Z7, vocabularies; fill `title` and `summary`). Row: `spec proposed`, `implementation not-started`, `verification undefined`, `specifiable true`, `implementable false`, `governingContext pending`, `design proposed`, `architecture not-yet-created` or `consistent`, `nextAction` "brainstorm" |
 | Step 2, approval | feature | `spec approved` with `decidedOn`; `specifiable false`; note with the path |
 | 3.1 / 3.2 | feature | `architecture` → `consistent`, or `pending-change` (Z2) then `changed-and-approved`; `design` → `approved` or `deferred`; dated note |
 | Step 4 | slices | One row per slice in the decided order: `spec proposed`, `implementation not-started`, `verification undefined`, `specifiable true`, `implementable false` ("spec not approved"), `dependsOn`, `tier`, `placeholders`, `governingContext pending`, `evidence.specs`, `nextAction` "prepare"; `parallelAllowed` from the project's concurrency decision (default `false`); `plannedFiles` forecast (`[]` when unknown). Note: order, lanes, reasons |
 | 5.2 | slice | `governingContext resolved` with references, or `spec blocked` with the blocker in `qualifier` and `nextAction` |
 | 5.4, phase 1 | slice | `spec approved` (`qualifier` names the seams), `seams`, `verification defined` (`tests` = scenario names, `commands` = gate commands), `specifiable false`, readiness recomputed, `nextAction` "plan (5.5)" |
 | first phase-2 commit | slice | `base` = phase-1 SHA, also in `evidence.commits`; `nextAction` = the next 5.5 stage |
-| each later phase-2 commit | slice | previous phase-2 SHA appended (not under Z7); `placeholders`; `nextAction` = the next red test or task |
+| each later phase-2 commit | slice | `placeholders`; `nextAction` = the next red test or task; without Z7, the previous phase-2 SHA appended |
 | amendment in a pre-authorised class | slice | dated note: class, paths, change, reviewer confirmation |
 | blocker | slice | `implementation blocked`, blocker in `qualifier` and `nextAction`, `implementable false` |
 | 5.6 | slice | `verification passed`; `evidence.tests` = commands run; `evidence.browser` when run |
 | 5.7, phase 3 | slice | `evidence.reviews` (reviewer, date); `implementation done`, `implementable false` ("done"), `nextAction` "None"; dependents recomputed. Provisional until integration |
 | integration | slice | Row merged by `id` onto the authoritative register with combined-tree gate and update-delta (or batch resolution) review evidence; now authoritative; dependents recomputed |
-| next register commit | slice | phase-3 or integration SHA appended (not under Z7) |
+| next register commit, without Z7 | slice | phase-3 or integration SHA appended |
 | Step 6 | feature | `verification passed`, `implementation done`, `nextAction` "None"; `evidence.commits` = the slices' integration SHAs, `evidence.tests` = closing gate commands; placeholders replaced or kept (Z4, Z5); note "feature closed" |
 | trivial change, R lane | feature | note naming the feature, committed with the change |
 | override, deferral, decision | any | dated note; the row it concerns updated in the same commit |
