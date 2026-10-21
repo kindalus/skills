@@ -1,264 +1,131 @@
 ---
 name: zafir-development-process
-description: |
-  Use this skill whenever the user explicitly invokes zafir-development-process or asks to use, follow, or apply the Zafir development process to a project, feature, feature extension, or bug fix. The skill applies the Four Agent Operating Principles — think before coding, simplicity first, surgical changes, and goal-driven execution — plus the Zafir workflow with slice-driven development, HTML slide-deck specs, mandatory live brainstorm deck → design → plan → implement, brown-field feature additions starting with brainstorm, and bug-fix flow. This skill is self-contained: do not bootstrap, create, or modify the repository's AGENTS.md as part of using it. Trigger on phrases like "use zafir-development-process", "use the Zafir process", "apply the Zafir workflow", "follow the Zafir process", "add a feature using Zafir", or any explicit request to operate within the Zafir development process.
+description: The official Zafir development workflow — governing context, brainstorm, design, slices, risk-proportional preparation, test-first implementation, optimistic concurrency through an integration queue, feature closure, and short paths — under the Four Agent Operating Principles.
+disable-model-invocation: true
 license: MIT
 ---
 
 # Zafir Development Process
 
-The official development workflow at Zafir. Every project, green-field build, brown-field feature addition, or feature extension follows the same shape: check governing context, brainstorm into a live HTML deck, agree on design and architecture, cut into slices, then implement slices one at a time. **No new feature work starts at slicing.** Bug fixes have their own focused workflow.
+Features follow **governing context → brainstorm → architecture/design → slices → preparation → implementation → integration → closure**; none starts at slicing. Short paths serve bug fixes, trivial changes and refactors. Effort scales with risk (*Risk lanes*). This skill installs nothing and leaves `AGENTS.md` untouched.
 
-All agent behaviour under this skill is governed first by the Four Agent Operating Principles: think before coding, simplicity first, surgical changes, and goal-driven execution. The Zafir process tells agents _when_ to brainstorm, design, slice, and implement; these principles define _how_ agents behave at every step.
+**Process version 2026-10-21.** A slice whose implementation (5.5) started under an earlier version finishes under it, with a dated note in its spec; revisions and project actions are in [MIGRATION](MIGRATION.md).
+
+## Read the applicable procedure
+
+Start at Step 0. Read the step's file before acting; links are requirements, not suggestions. Resume at the recorded step; never replay approved work.
+
+| Step | Produces | Commit marker | Read |
+| --- | --- | --- | --- |
+| 0 Apply | lane, resume point, plan | — | this file, [SHORT-PATHS](SHORT-PATHS.md) |
+| 1–2 Context, brainstorm | `brainstorm.md` approved by path | on approval | [PLANNING](PLANNING.md), [SPEC-LAYOUT](SPEC-LAYOUT.md) |
+| 3.1–3.2 Architecture, design | `architecture.md`, `design.md` (or deferral) | on approval | PLANNING; [ARCHITECTURE-GUIDELINE](ARCHITECTURE-GUIDELINE.md) in 3.1 |
+| 4 Plan | slice specs, register rows, decided order | on agreement | PLANNING, [SLICE-DISCIPLINE](SLICE-DISCIPLINE.md) |
+| 5.1–5.4 Prepare | impact map, feasible scenarios, delivery package, approved slice spec | phase 1 (base) | [PREPARATION](PREPARATION.md), SPEC-LAYOUT |
+| 5.5–5.7 Implement | plan, all the slice's tests (RED), then green one test at a time; whole gate; independent review | phase 2, phase 3 | [IMPLEMENTATION](IMPLEMENTATION.md) |
+| Integration | merged slice or batch, combined-tree gate | integration | [CONCURRENCY](CONCURRENCY.md) |
+| 6 Close | closed feature, metrics | closing | IMPLEMENTATION |
+
+Every register read or write follows [STATUS-REGISTER](STATUS-REGISTER.md); creating or validating a register uses [REGISTER-SCHEMA](REGISTER-SCHEMA.md); migrating one, or following a citation to a section that no longer exists, uses [MIGRATION](MIGRATION.md).
+
+## Terms
+
+Each term has one meaning across these files:
+
+| Term | Meaning |
+| --- | --- |
+| **Step** | a numbered process step: 0–6, with 3.1–3.2 and 5.1–5.7 |
+| **Stage** | one of the three parts of 5.5: plan, tests, green |
+| **Green step** | one stage-3 change that turns tests green, and its commit |
+| **Phase** | a slice commit phase: 1, 2, 3 or integration (SPEC-LAYOUT *Commit phases of a slice*) |
+| **Lane** | the risk classification of a request or slice (*Risk lanes*) |
+| **Tier** | a slice's ordering group: business, security, infrastructure (SLICE-DISCIPLINE *Slice ordering*) |
+| **Class** | a pre-authorised amendment class: M1–M3 or a listed project class (IMPLEMENTATION *Mechanical amendment classes*) |
+| **Profile** | `full` or `lite`, set once per project (SPEC-LAYOUT *Profile and architecture style*) |
 
 ## Four Agent Operating Principles
 
-These principles apply to all agent work while this skill is active: code, tests, docs, specs, slide decks, `docs/wiki/`, reviews, and bug fixes. If a process rule appears to push against a principle, surface the tradeoff to the user instead of resolving it silently.
+| Principle | Required behavior |
+| --- | --- |
+| **Think Before Coding** | State assumptions and interpretations; never choose silently. Ask product/scope questions in the decision round (PREPARATION *Decision round*); explain and record mechanism choices. Push back on weak ideas; name what is unclear. |
+| **Simplicity First** | Minimum correct solution: no unrequested features, speculative flexibility, single-use abstractions or impossible-error handling. |
+| **Surgical Changes** | Touch only the request's scope, in its style; no adjacent tidying; remove only what your change made unused. Every changed line traces to the request or a mandatory artefact. |
+| **Goal-Driven Execution** | Define verifiable success first ("fix" → failing reproduction made green; "refactor" → green before and after) and loop until verified. Plans read `step → verify: check`. |
 
-### 1. Think Before Coding
+**Collision handling.** Mandatory artefacts are in scope but minimal. Simplicity never weakens legal, security, data-integrity or acceptance requirements. Surface principle/process conflicts to the user; never resolve them silently.
 
-**Don't assume. Don't hide confusion. Surface tradeoffs.**
+## Roles
 
-- State assumptions explicitly — if uncertain, ask rather than guess.
-- Present multiple interpretations when ambiguity exists; do not pick silently.
-- Push back when warranted; if a simpler approach exists, say so.
-- Stop when confused; name what is unclear and ask for clarification.
+| Role | Who | Decides |
+| --- | --- | --- |
+| **User** | the person who owns the project (the owner) | product, scope, compliance, approvals, overrides, hard-to-reverse decisions |
+| **Responsible** | accountable to the user for a slice's preparation and execution | mechanisms, escalations within approved scope, new areas |
+| **Integrator** | sole writer of the integration branch and authoritative register; may be the responsible | admission order, integrations and batches, conflict resolutions |
+| **Implementer** (worker) | writes the slice's tests and code: an agent, a team or a person | everything inside the approved spec and classes |
+| **Reviewer** | did not write the diff under review | findings; confirms amendment classes in writing |
 
-### 2. Simplicity First
+One party may hold several roles, but never reviews its own diff where independent review applies.
 
-**Minimum code that solves the problem. Nothing speculative.**
+## Governing context
 
-- No features beyond what was asked.
-- No abstractions for single-use code.
-- No flexibility or configurability that was not requested.
-- No error handling for impossible scenarios.
-- If 200 lines could be 50, rewrite it.
+Prior decisions, domain rules, policies, contractual, security and data-integrity requirements, architectural constraints and applicable law, found in `docs/wiki/` and the repository's instructions, specs, code and docs. Check it before every decision.
 
-The test: would a senior engineer say this is overcomplicated? If yes, simplify.
+**Standing wiki rule.** `docs/wiki/`, when present, is owned by `llm-wiki` (schema `docs/wiki/wiki-schema.md`): consult it before each decision; write durable deliberations back and link them from the specs relying on them. Only the user changes `docs/wiki/raw/`.
 
-### 3. Surgical Changes
+## Standing rules
 
-**Touch only what you must. Clean up only your own mess.**
+### Green means the whole gate
 
-- Do not improve adjacent code, comments, or formatting.
-- Do not refactor things that are not broken.
-- Match existing style, even if you would do it differently.
-- If you notice unrelated dead code, mention it; do not delete it.
-- Remove imports, variables, functions, or files that your own changes made unused.
-- Do not remove pre-existing dead code unless asked.
+Inside red → green, one test passes. Elsewhere, every applicable check passes with the repository's real commands: full tests and build, type check and lint, added migrations up and down on a disposable database, real-browser check (load, behaviour, clean console) for browser-running changes.
 
-The test: every changed line should trace directly to the user's request or to a mandatory Zafir process artefact.
+**When it runs:** before the slice's final review (5.6); after any later change to code, tests, migrations or build inputs; on the combined tree at every integration. A commit with none of these (documentation, register, files regenerated by the project's generator) needs no new gate when a later integration gate covers its tree or it only records that gate's evidence; it runs the project's cheap validators on what changed (register, specs, the generator's check). Focused runs never replace the gate.
 
-### 4. Goal-Driven Execution
+**Disposable database only**, never shared or real data. An irreversible migration records expand/contract, verified backup/restore or forward-fix in the slice spec, never a fake down path.
 
-**Define success criteria. Loop until verified.**
+- **Never weaken a guard or test** to obtain green: no removal, skip, loosened assertion or rewritten expectation outside an approved scenario change. A new pinning guard (hash, regex, text, count) needs a written reason why behaviour cannot be tested; prefer a behaviour test.
+- **Honest register:** a state changes only with its evidence; a missing approval, assessment or proof rejects the update. The register on the integration branch is authoritative; worker copies are provisional.
+- **Versioned evidence:** versioned documents never cite transient paths (`tmp/`, run directories) as support; keep or summarise the evidence in versioned files.
+- **Sequential by default.** Concurrent execution only under CONCURRENCY. Branches are updated by **merge, never rebase**: phase SHAs are evidence.
+- **Own branch, always.** Every slice (from its phase-2 commits), bug fix, trivial change and R-lane change runs on its own branch, sequential work included, and reaches the integration branch through an integration commit (CONCURRENCY *Integration queue*). Red commits (a RED battery, a failing reproduction) live only there; the integration branch receives gated trees.
+- **Independent review** by someone who did not write the diff for local, transversal and R-lane work; self-review suffices for trivial, lite and bug-fix work.
 
-Transform imperative tasks into verifiable goals:
+### Commits are the markers
 
-| Instead of...    | Transform to...                                       |
-| ---------------- | ----------------------------------------------------- |
-| "Add validation" | "Write tests for invalid inputs, then make them pass" |
-| "Fix the bug"    | "Write a test that reproduces it, then make it pass"  |
-| "Refactor X"     | "Ensure tests pass before and after"                  |
+This process authorizes exactly the **Commit:** markers in its files, at their moments; ask before any other commit. Invoking this skill is the user's request for those marker commits: a standing instruction to commit only on demand (`CLAUDE.md`, `AGENTS.md`, memory) is met by them and still forbids every other commit. Without marker commits, `base`, phase SHAs and Z3 have no evidence; when the user withholds them, say so at Step 0 and record the choice (precedence rule 1). Stage exactly the files the phase produced (check `git status`), never user work; no deferred catch-all commit. Slice commits carry the trailers `Slice: <id>` and `Phase: 1|2|3|integration`.
 
-For multi-step tasks, state a brief plan:
+## Risk lanes
 
-```text
-1. [Step] → verify: [check]
-2. [Step] → verify: [check]
-3. [Step] → verify: [check]
-```
+Classify requests at Step 0 and slices at Step 4; in doubt, take the heavier lane and ask.
 
-Strong success criteria let agents loop independently. Weak criteria such as "make it work" require clarification.
+| Lane | When | Preparation |
+| --- | --- | --- |
+| Bug fix | existing behaviour is wrong | reproduction first (SHORT-PATHS) |
+| Trivial | SHORT-PATHS criteria | the test only |
+| R | refactor; no behaviour, contract or compliance change | technical note; gate before and after |
+| Lite | slice of a lite-profile project | scenarios; no impact map or package |
+| Local | one module or context; no shared convention, field, guard or migration | short impact map and package |
+| Transversal | crosses modules/contexts, changes shared conventions, fields, guards or migrations, or opens a chain | full impact map, package and pre-mortem |
 
-### Collision handling between the principles and the Zafir process
+## Precedence and exceptions
 
-- Mandatory Zafir artefacts (specs, slice decks, `STATUS.md`, and `docs/wiki/` updates) are in scope when the workflow requires them, but they must still be minimal and directly traceable to the task.
-- Simplicity First does not override real legal, security, data-integrity, or acceptance-test requirements. If those requirements add complexity, state why.
-- Surgical Changes does not forbid removing unused code that your own edits created; it forbids unrelated cleanups.
-- Goal-Driven Execution applies at every step: define success criteria before acting and verify them before moving on.
+Above this order sit the **operating environment** and **hard constraints** (legal obligations, deployable-build security, integrity and privacy of real data): decline a crossing instruction and offer the nearest compliant alternative. Within it, say which rule won:
 
-## Zafir workflow principles
-
-- **Slice-driven development.** Work is decomposed into small, related-feature slices, stored under `docs/specs/`.
-- **Specs are HTML slide decks.** Brainstormings, design/architecture decisions, and slice specs always live as HTML slide decks — reviewable, presentable, and version-friendly.
-- **`docs/wiki/` is the project LLM Wiki.** Whenever this directory exists, it is governed by the `llm-wiki` skill for project references, deliberations, decisions, domain rules, constraints, and legal/regulatory materials when applicable.
-- **The brainstorm deck is live.** A brainstorm deck is created as soon as brainstorming starts and updated after every user/agent iteration before the next question or step.
-- **Feature additions also begin with brainstorm.** In a brown-field codebase, a request to add or extend functionality still starts at Step 1/Step 2, produces an approved feature brainstorm deck, and only then moves to design and slicing.
-- **One slice at a time.** A slice must be fully green before the next one starts.
-- **Enrich, never overwrite.** When updating shared documentation, the goal is to aggregate and refine — never to silently replace what is already there.
+1. **Explicit user instruction** beats process rules; record it where the overridden rule lives (Decisions entry, register note or slice spec).
+2. **Governing context** beats Simplicity First and slice order; the user may change its project-decision part, never its hard constraints.
+3. **Short paths** override only the steps they name.
+4. **A step** beats a general section; a remaining conflict is a defect to surface.
+5. **Repository instructions** (`AGENTS.md`, `CLAUDE.md`, CI) beat defaults on commands, layout, commit format and tooling; conflicts with steps go to the user.
+6. **Wiki structure** belongs to `llm-wiki`, **spec structure** to this process.
+7. **Commits** occur only at the markers.
 
 ## Step 0 — Apply this skill
 
-When this skill is invoked, use the instructions in this file as the active workflow for the requested work. The skill is self-contained and does not install itself into the repository.
+**Entry:** every request under this process.
 
-- Do not create, modify, or require `AGENTS.md` as part of this workflow.
-- Treat existing repository instructions, when present, as normal project context.
-- If existing project instructions conflict with this workflow, surface the conflict to the user and ask how to proceed.
-- Before acting on multi-step work, state a brief goal-driven plan with verification checks.
+1. Follow repository conventions (rule 5).
+2. Classify the lane; ask if unsure. A new project is full until Step 2 proposes a profile.
+3. Read the register, if any (STATUS-REGISTER *Reading the register*), and resume exactly there; ask which feature if several are in flight.
+4. Run `git status`; ask what to do with changes this process did not make.
+5. State the plan with verification checks and the marker commits it will make; load the step's file.
 
-## Step 1 — Governing context check
-
-At the very start of every project or feature brainstorm — before design, slicing, or implementation — identify the governing context for the work. Governing context includes not only legal/regulatory material, but also project references, existing decisions, domain rules, internal policies, customer or contractual requirements, security/data-integrity requirements, and architecture constraints.
-
-- If `docs/wiki/` exists, consult it via `llm-wiki` before asking or deciding, and use any relevant pages as inputs to the brainstorm.
-- Ask the user whether any additional governing context or source material exists that is not yet reflected in the wiki or repository.
-- If relevant source material is missing, ask the user to provide it or place raw sources in `docs/wiki/raw/` when that convention exists.
-- When legal/regulatory material applies, store or ingest it in `docs/wiki/` and treat it as one category of governing context, not the only category.
-- From this point on, every decision (scope, design, architecture, slice acceptance, implementation, bug fix) must be checked against the relevant governing context in `docs/wiki/` and the repository.
-
-## Project wiki discipline (`docs/wiki/`)
-
-Whenever `docs/wiki/` exists, treat it as the persistent project knowledge base, not just as a law or compliance folder. Use the `llm-wiki` skill to:
-
-- ingest and organise external or internal references relevant to the project,
-- record durable deliberations and decisions that should outlive chat or a slide deck,
-- query prior references, deliberations, decisions, domain rules, constraints, and applicable legal/regulatory materials before taking or reviewing scope, design, architecture, slice, implementation, or bug-fix decisions,
-- keep wiki pages linked to the relevant specs/decks when their contents affect the project direction.
-
-`docs/wiki/raw/`, when present, is a user-curated source drop zone. Only the user may manually insert files there. Agents must not create, edit, rename, move, or delete files in `docs/wiki/raw/`; they may only read those files and ingest their contents into maintained wiki pages outside `raw/`. If a needed source is missing from `docs/wiki/raw/`, ask the user to place it there.
-
-Legal/regulatory material, when applicable, is one category of wiki content; it does not limit the wiki's broader role.
-
-## Step 2 — Brainstorm
-
-This step is mandatory for every new project, every feature addition, and every non-trivial feature extension — including brown-field work in an existing codebase. Only pure bug fixes may use the bug-fix workflow instead.
-
-Conduct a structured interview directly with the user and use the `idea-refine` skill at each iteration. Do **not** rely on a separate `interview-me` skill; this process must be executable with the skills actually available. Elicit:
-
-- the overall objective of the project or feature,
-- technological constraints,
-- design and architecture principles to follow,
-- non-goals and known boundaries.
-
-### Mandatory live deck discipline
-
-As soon as brainstorming starts, create a feature-specific HTML slide deck under `docs/specs/`, e.g. `docs/specs/brainstorm-<feature-slug>.html`. Use the `html-slide-deck` skill's single-file HTML conventions, but save the deck in the repository under `docs/specs/`, not in `/tmp`.
-
-The deck must always include:
-
-- current objective and user value,
-- constraints, principles, non-goals, and known boundaries,
-- decisions made so far,
-- open questions and blockers,
-- an iteration log with intermediate conclusions from each round.
-
-For every brainstorm iteration:
-
-1. Ask/refine with the user.
-2. Update the deck on disk with the latest intermediate conclusions, decisions, changed assumptions, and open questions.
-3. Only after the deck is updated, ask the next question or move to the next step.
-
-An iteration includes any user answer, agent synthesis, `idea-refine` phase, pivot, decision, or scope change. Do not keep intermediate conclusions only in chat. If the deck cannot be written or updated, stop and tell the user instead of continuing in memory.
-
-For brown-field feature additions:
-
-- Inspect existing repository instructions when present, relevant specs, and relevant code/docs to understand the baseline before or during brainstorming.
-- Capture existing architecture constraints and compatibility requirements in the brainstorm deck.
-- Existing architecture can be accepted as the baseline in Step 3, but it does **not** cancel the requirement for a feature brainstorm deck.
-- Never jump from a raw feature request directly to Step 4 or Step 5 just because the codebase already exists.
-
-If `docs/wiki/` exists, consult it via `llm-wiki` during brainstorming for prior references, deliberations, decisions, domain rules, constraints, and applicable legal/regulatory materials that may affect scope, constraints, or direction. Durable conclusions that should survive beyond the deck should also be written back to the wiki and linked from the deck.
-
-When governing context from `docs/wiki/` or the repository applies, the brainstorm deck must explicitly capture how the objective and constraints align with it — consult the wiki via `llm-wiki` while drafting, and record the relevant references inside the deck.
-
-The brainstorm ends only when the user explicitly approves the slide deck by path. That approved deck is the spec of record for the project or feature.
-
-## Step 3 — Design and architecture
-
-Once the brainstorm deck is approved, work out _how_ the system will be shaped before slicing it.
-
-Ask the user about:
-
-- design constraints (technical, organisational, performance, regulatory),
-- desired design principles and architectural patterns,
-- existing technology choices that must be honoured.
-
-Iterate with the user until there is alignment on a design and architecture direction — or until the user explicitly chooses to defer this decision. Skipping is allowed only when the user clearly asks for it; never decide that silently.
-
-**For existing projects**, first ask the user whether they want to revisit and refine the current design and architecture. If yes, iterate as above. If no, take the existing codebase as the baseline and respect what it already establishes.
-
-Capture the outcome in an HTML slide deck under `docs/specs/` (e.g. `architecture.html`), updating it after each design iteration. If the step is deferred, record that explicitly in the brainstorm deck before moving to slicing. If `docs/wiki/` exists, consult prior project references, deliberations, decisions, domain rules, constraints, and applicable legal/regulatory materials via `llm-wiki` before settling architecture, and record durable architecture deliberations or decisions back into the wiki.
-
-## Step 4 — Plan: cut into slices
-
-Before cutting slices, verify that there is an approved brainstorm deck for this project/feature and an approved or explicitly deferred design/architecture outcome. If either gate is missing, stop and return to the relevant earlier step. Take the approved brainstorm deck (and the design/architecture deck, when present) and divide the work into slices of correlated functionality.
-
-- Each slice gets its own HTML slide deck under `docs/specs/slices/`, numbered sequentially (`01-*.html`, `02-*.html`, ...).
-- Each slice deck is a mini-spec containing: idea, scope, decisions, likely implementation zones, success conditions, and explicit exclusions.
-- Each slice deck must reference the brainstorm deck that originated it, and the design/architecture deck when one exists.
-- If `docs/wiki/` exists, each slice deck must also reference any relevant project references, deliberations, decisions, domain rules, constraints, or applicable legal/regulatory materials from the wiki; consult `llm-wiki` when defining or reviewing the slice.
-- Each slice deck must declare which governing context applies to its scope, including relevant wiki pages, prior decisions, domain rules, constraints, and applicable legal/regulatory materials — consult `docs/wiki/` via `llm-wiki` when defining the slice and link the relevant references inside the deck.
-- Track canonical progress across all slices in `docs/specs/slices/STATUS.md`.
-
-Never create a slice deck directly from a raw feature request. Slices are derived from approved decks, not from chat-only conclusions.
-
-## Step 5 — Implement a slice
-
-Slices are implemented strictly one at a time. A slice does not start until the previous one is fully green.
-
-### 5.1 Pick or create the slice
-
-Locate the slice deck in `docs/specs/slices/` and confirm its status in `docs/specs/slices/STATUS.md`. If the user is requesting new behaviour that is not already covered by an approved brainstorm deck, this is not "create a new slice"; return to Step 1/Step 2 and produce the feature brainstorm deck first. If a new slice is needed within an approved feature plan, create it now, numbered sequentially.
-
-### 5.2 Refine the idea before implementing
-
-Run the `idea-refine` skill on the slice before any code is written.
-
-- If there is any product uncertainty, **stop and ask the user**. Never invent direction silently.
-- Update the slice's slide deck with the refined understanding.
-
-### 5.3 Stress-test the decisions
-
-Run the `grill-me` skill on the refined slice. This forces concrete decisions before any test or code is written. Any decision that cannot be settled is logged as a blocker inside the slice deck. If `docs/wiki/` exists, record durable deliberations and decisions from this stress test in the wiki via `llm-wiki` and link them from the slice deck.
-
-### 5.4 Keep documentation in sync
-
-Whenever a slice changes state, update both `docs/specs/slices/STATUS.md` and the slice's own deck.
-
-**Already-implemented decks are not rewritten to change their original scope.** Any new behaviour belongs in a future slice.
-
-### 5.5 Acceptance tests first
-
-Before implementation, write acceptance tests directly from the slice's success conditions.
-
-- Tests cover **external behaviour**, not internal details.
-- These tests are what the slice will ultimately be measured against.
-- When relevant governing context can be expressed as observable behaviour, write acceptance tests that verify alignment with it. This includes legal/regulatory requirements, security/data-integrity rules, domain constraints, and prior product decisions from `docs/wiki/` or the repository. Treat these as first-class tests, not optional extras.
-
-### 5.6 Implement incrementally
-
-- Decompose the slice into small, verifiable tasks with acceptance criteria and a sensible dependency order.
-- When practical, follow TDD: failing test → smallest correct change → refactor with tests green.
-- Split large changes into smaller ones.
-- Use these skills throughout: `incremental-implementation`, `test-driven-development`, `context-engineering`, `source-driven-development`.
-- When the slice involves APIs or interfaces, also use `api-and-interface-design`.
-- When the slice touches the UI, also use `frontend-ui-engineering`.
-- If `docs/wiki/` exists, consult it via `llm-wiki` whenever a design choice could be affected by project references, prior deliberations, decisions, domain rules, constraints, or legal/regulatory materials.
-
-### 5.7 Verify
-
-Run the full test suite. The slice is only done when **everything is green**. Apply standard quality gates before merging.
-
-### 5.8 Phased commits
-
-For every new slice, produce separate commits for:
-
-1. refinement / spec changes (slice deck + `STATUS.md`),
-2. `grill-me` decisions,
-3. acceptance tests,
-4. verified implementation.
-
-Only when all of the above is in place does the next slice begin.
-
-## Bug fix workflow
-
-Bug fixes do not go through the full slice workflow, but they are still disciplined:
-
-1. **Diagnose the issue.** Reproduce it and understand the root cause before touching code. If diagnosis shows the request is actually new functionality or a feature extension, switch to the full Step 1 → Step 5 workflow before planning slices or code.
-2. **Test coverage:**
-   - If a test already covers this behaviour, adjust it as needed.
-   - If no test covers it, write one that fails for the current bug.
-3. **Patch narrowly.** Touch only the code strictly required to fix the issue. No drive-by refactors.
-4. **Green bar.** All tests must pass before the fix is considered done.
-5. If `docs/wiki/` exists, verify the fix still aligns with relevant project references, deliberations, decisions, domain rules, constraints, and applicable legal/regulatory materials in the wiki (via `llm-wiki`).
+**Done when:** lane, resume point, tree state and plan (with its commits) are stated. No commit.
