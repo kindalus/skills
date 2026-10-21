@@ -28,9 +28,9 @@ Reject the update when an approval, assessment or proof is missing; state what i
 | 3.1 / 3.2 | feature | `architecture` → `consistent`, or `pending-change` (Z2) then `changed-and-approved`; `design` → `approved` or `deferred`; dated note |
 | Step 4 | slices | One row per slice in the decided order: `spec proposed`, `implementation not-started`, `verification undefined`, `specifiable true`, `implementable false` ("spec not approved"), `dependsOn`, `tier`, `placeholders`, `governingContext pending`, `evidence.specs`, `nextAction` "prepare"; `parallelAllowed` from the project's concurrency decision (default `false`); `plannedFiles` forecast (`[]` when unknown). Note: order, lanes, reasons |
 | 5.2 | slice | `governingContext resolved` with references, or `spec blocked` with the blocker in `qualifier` and `nextAction` |
-| 5.4, phase 1 | slice | `spec approved` (`qualifier` names the seams), `seams`, `verification defined` (`tests` = scenario names, `commands` = gate commands), `specifiable false`, readiness recomputed, `nextAction` "plan (5.5)" |
-| first phase-2 commit | slice | `base` = phase-1 SHA, also in `evidence.commits`; `nextAction` = the next 5.5 stage |
-| each later phase-2 commit | slice | `placeholders`; `nextAction` = the next red test or task; without Z7, the previous phase-2 SHA appended |
+| 5.4, phase 1 | slice | `spec approved` with `decidedOn` (`qualifier` names the seams), `seams`, `verification defined` (`tests` = scenario names, `commands` = gate commands), `specifiable false`, readiness recomputed, `nextAction` "plan (5.5)" |
+| first phase-2 commit | slice | `base` = phase-1 SHA (lite fold: its parent, SHORT-PATHS), also in `evidence.commits`; `nextAction` = the next 5.5 stage |
+| later phase-2 commits | slice | only what changed: `nextAction` when the 5.5 stage changes (tests, then green), never per green step; `placeholders`; derived scenarios in `verification.tests`; without Z7, the previous phase-2 SHA appended |
 | amendment in a pre-authorised class | slice | dated note: class, paths, change, reviewer confirmation |
 | blocker | slice | `implementation blocked`, blocker in `qualifier` and `nextAction`, `implementable false` |
 | 5.6 | slice | `verification passed`; `evidence.tests` = commands run; `evidence.browser` when run |
@@ -45,7 +45,7 @@ A lite slice with nothing to grill goes from creation straight to 5.4, approved 
 
 ## Reading the register
 
-Step 0 first reads `schemaVersion` and any declared compatibility profile (MIGRATION *Compatibility profiles*): an earlier version under a declared profile is valid as is — operate through its mappings, never migrate or add fields unasked; an undeclared earlier or custom version is reported before any write. Then it reads the authoritative copy: unfinished features, candidate slices, blocked rows and their `nextAction`. For slices in execution, consult the execution system (branches, worktrees, integrator), then their provisional registers. If ownership cannot be established, stop before dispatching a duplicate worker; `base` or `implementable` alone does not prove activity.
+Step 0 first reads `schemaVersion` and any declared compatibility profile (MIGRATION *Compatibility profiles*): an earlier version under a declared profile is valid as is — operate through its mappings, never migrate or add fields unasked; an undeclared earlier or custom version is reported before any write. Then it reads the authoritative copy: unfinished features, candidate slices, blocked rows and their `nextAction`. For slices in execution, consult the execution system (branches, worktrees, integrator), then their provisional registers. Inside stage 3 of 5.5 the register names only the stage: the resume point is the slice branch's last `Phase: 2` commit and the first task of the spec's implementation plan whose tests are still red when the battery runs there. If ownership cannot be established, stop before dispatching a duplicate worker; `base` or `implementable` alone does not prove activity.
 
 ```bash
 R=docs/specs/STATUS.json

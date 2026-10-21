@@ -12,7 +12,7 @@ Three stages, in this order; each ends on its `verify:` check.
 
 #### Stage 1 — Plan
 
-From the delivery package (or the spec, when the implementer prepared the slice), write the implementation plan: tasks, the scenarios and tests of each, write scope, and order by dependency, then risk.
+From the delivery package (or the spec, when the implementer prepared the slice), write the implementation plan: tasks, the scenarios and tests of each, write scope, and order by dependency, then risk. It goes in the slice spec, committed with the first phase-2 commit; it is the resume point inside stage 3 (STATUS-REGISTER *Reading the register*).
 
 verify: every test maps to a scenario, and every scenario to a task.
 
@@ -94,7 +94,7 @@ Run the **whole gate** (SKILL.md); one passing test is not it.
 
 ### 5.7 Review before done
 
-Review `git diff <base>` (committed and uncommitted, from the row's `base`) against the spec and the Four Principles. Local, transversal and R-lane slices are reviewed by someone who did not write the diff; trivial, lite and bug-fix work may be self-reviewed. Check **all**:
+Review `git diff <base>` (committed and uncommitted, from the row's `base`) against the spec and the Four Principles. Local, transversal and R-lane slices are reviewed by someone who did not write the diff (SKILL.md *Roles*, independent reviewer); trivial, lite and bug-fix work may be self-reviewed. Check **all**:
 
 - every changed line traces to slice scope or a mandatory artefact; exclusions hold; no out-of-scope refactoring;
 - every original, derived and context scenario has a passing test and every test maps to a scenario; derived scenarios changed neither scope nor behaviour without a recorded decision;

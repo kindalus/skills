@@ -50,13 +50,13 @@ A standing duty through Step 5: whenever a slice changes state, update its row (
 4. **Feasibility:** design each scenario test-first on paper — seams and ports used, order, fixtures, guards met, host needs. A scenario that contradicts a guard, a constraint or a process rule is corrected now, never in 5.5.
 5. **Size:** split by domain when the map demands it (SLICE-DISCIPLINE *Lane, size and splitting*).
 6. **Delivery package** when the implementer did not prepare the slice; **pre-mortem** for transversal slices.
-7. **Approval:** present the slice under SPEC-LAYOUT's **Slice approval presentation** (**Lite approval** in a `lite` project), even when every seam was reused or an earlier version was approved. On recovery, reuse a recorded approval only if it covers the current content.
+7. **Approval:** present the slice under SPEC-LAYOUT's **Slice approval presentation** (**Lite approval** in a `lite` project), even when every seam was reused or an earlier version was approved; a project without a slice-deck renderer adopts one first (SPEC-LAYOUT *Deck generation*). On recovery, reuse a recorded approval only if it covers the current content.
 
 This step writes scenarios, **no executable tests**.
 
 **Done when:** every success condition and context requirement has a feasible scenario at a listed seam, and the user approved the presented Markdown version. Apply the 5.4 transition (STATUS-REGISTER).
 
-**Commit (phase 1):** spec, approval HTML (none in `lite`), register, wiki pages and `CONTEXT.md` terms from preparation. This is the slice's **base**.
+**Commit (phase 1):** spec, approval HTML (none in `lite`), register, wiki pages and `CONTEXT.md` terms from preparation, plus the renderer when this approval adopted it. It lands on the integration branch, written by the integrator and serialized with integrations; a responsible who is not the integrator hands over the approved files. This is the slice's **base**.
 
 ## Impact map
 

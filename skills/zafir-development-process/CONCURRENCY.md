@@ -71,7 +71,7 @@ The normal way to integrate several ready elements (slices with phase 3 committe
 
 - Merge the register **by `id`**, never by whole file: apply the candidate's row changes and new notes onto the authoritative register; keep authoritative scheduling fields (`dependsOn`, `parallelAllowed`, envelope); recompute readiness. Resolve it semantically even when Git reports no conflict.
 - Other id-keyed shared records (matrices, assessments, indexes) merge by `id` too. Generated files are regenerated on the combined tree, never merged by hand.
-- Only the integrator writes the authoritative register, including plan revisions and feature closure, serialized with integrations. A plan revision pauses only the slices whose plan artefacts change. Feature closure needs its own slices integrated, not every worker idle.
+- Only the integrator writes the authoritative register, including phase-1 commits (PREPARATION 5.4), plan revisions and feature closure, serialized with integrations. A plan revision pauses only the slices whose plan artefacts change. Feature closure needs its own slices integrated, not every worker idle.
 
 ## Register fields
 

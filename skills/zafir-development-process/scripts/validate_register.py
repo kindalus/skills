@@ -187,11 +187,20 @@ def check_row_shape(row: dict, where: str, enums: dict, report: Report) -> None:
             if value not in allowed:
                 report.error("I13", where, f"`{field}` value {value!r} not declared")
 
-    # I14: dates.
+    # I14: dates; an approved spec carries its approval date.
     for field in ("spec", "implementation", "design", "architecture"):
         value = row.get(field)
         if isinstance(value, dict) and "decidedOn" in value and not valid_date(value["decidedOn"]):
             report.error("I14", where, f"`{field}.decidedOn` = {value['decidedOn']!r} is not YYYY-MM-DD")
+    if state(row, "spec") == "approved" and "decidedOn" not in as_dict(row.get("spec")):
+        report.error("contract", where, "`spec` approved without `decidedOn`")
+
+    # Verification `defined` records its tests and commands; a slice keeps them once `passed`.
+    verification = as_dict(row.get("verification"))
+    if state(row, "verification") == "defined" or (state(row, "verification") == "passed" and row.get("kind") != "feature"):
+        for field in ("tests", "commands"):
+            if not as_list(verification.get(field)):
+                report.error("contract", where, f"`verification` {verification.get('state')} without `{field}`")
 
 
 def check_readiness(row: dict, where: str, by_id: dict, report: Report) -> None:
@@ -247,6 +256,15 @@ def check_blockers(row: dict, where: str, noted: set[str], report: Report) -> No
         )
         if not named:
             report.error("I10", where, f"{', '.join(blocked)} blocked without a concrete blocker")
+        # The process writes each blocker in the blocked field's own qualifier.
+        assessments = as_dict(row.get("assessments"))
+        unqualified = [
+            f for f in blocked
+            if not text(as_dict(assessments.get(f[12:]) if f.startswith("assessments.") else row.get(f)).get("qualifier"))
+        ]
+        if named and unqualified:
+            report.warn("I10", where, f"{', '.join(unqualified)} blocked without its own `qualifier`; "
+                        "record the blocker there (STATUS-REGISTER transitions)")
     if state(row, "implementation") == "won't-do":
         if not text(as_dict(row.get("implementation")).get("qualifier")) and row["id"] not in noted:
             report.error("I11", where, "won't-do without a recorded decision or successor")

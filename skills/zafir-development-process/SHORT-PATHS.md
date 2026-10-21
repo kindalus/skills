@@ -35,7 +35,9 @@ A project profiled `lite` (SPEC-LAYOUT *Profile and architecture style*) runs at
 - Step 2: one `brainstorm.md` for the project, approved once; later CRUD additions enrich it as a section, approved by path before slicing, unless the user asks for a separate feature.
 - Step 3: `architecture.md` holds the header (`Profile: lite`, `Architecture style: none` unless chosen), stack and constraints; no module map. `design.md` is deferred by default, without asking.
 - Step 4: slices and tiers as usual.
-- Step 5: no impact map, delivery package or pre-mortem; seams and scenarios first; grilling only when a slice has a decision, in one round; placeholders registered; the slice approved by its Markdown (SPEC-LAYOUT *Lite approval*). Then the three stages of 5.5 as usual: plan, the whole battery and its RED log, green one test at a time. Phase 1 may fold into the phase-2 tests commit (`base` is then that commit's parent) and phase 3 into the last green step.
+- Step 5: no impact map, delivery package or pre-mortem; seams and scenarios first; grilling only when a slice has a decision, in one round; placeholders registered; the slice approved by its Markdown (SPEC-LAYOUT *Lite approval*). Then the three stages of 5.5 as usual: plan, the whole battery and its RED log, green one test at a time. Two folds are allowed:
+  - **Phase 1 into the first phase-2 commit** (skeleton, plumbing or tests, whichever comes first), on the slice branch with trailer `Phase: 2`. `base` is that commit's parent, the commit the slice branch starts from, so `git diff <base>` covers every slice commit; the freshness check diffs from `base`.
+  - **Phase 3 into the last green step:** the gate (5.6) and review (5.7) run on the uncommitted final tree; that commit then holds the last green change, review fixes, final spec and register, with trailer `Phase: 3`.
 
 ## Bug fix workflow
 

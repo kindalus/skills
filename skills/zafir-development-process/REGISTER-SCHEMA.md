@@ -1,6 +1,6 @@
 # Status register schema
 
-Read when creating, validating or extending a register. A new register starts from `assets/STATUS.template.json`; `scripts/validate_register.py` checks what a file can show of the invariants, the required `governingContext` assessment, Z2–Z6 and the `areas` option, and lists what it cannot. Day-to-day operation (authority, safe updates, transitions, queries) lives in [STATUS-REGISTER.md](STATUS-REGISTER.md); migration and compatibility profiles in [MIGRATION.md](MIGRATION.md).
+Read when creating, validating or extending a register. A new register starts from `assets/STATUS.template.json`; `scripts/validate_register.py` checks what a file can show of the invariants, the required `governingContext` assessment, approval dates, recorded verification, Z2–Z6 and the `areas` option, and lists what it cannot. Day-to-day operation (authority, safe updates, transitions, queries) lives in [STATUS-REGISTER.md](STATUS-REGISTER.md); migration and compatibility profiles in [MIGRATION.md](MIGRATION.md).
 
 The register answers separate questions: which work items exist, what each depends on, whether its spec is settled, whether its implementation is finished or blocked, and whether spec or implementation work may start now. The contract is domain-neutral; projects may call items slices, tasks or changes and add policy assessments.
 
@@ -10,7 +10,7 @@ REQUIRED, OPTIONAL and FORBIDDEN define the contract. Use exactly these values:
 
 | Field | Values |
 | --- | --- |
-| `spec.state` | `proposed` (draft, approval incomplete), `approved` (explicit approval), `blocked` (missing source, decision or dependency), `n/a` (no standalone spec needed) |
+| `spec.state` | `proposed` (draft, approval incomplete), `approved` (explicit approval, dated in `decidedOn`), `blocked` (missing source, decision or dependency), `n/a` (no standalone spec needed) |
 | `implementation.state` | `not-started`, `blocked` (concrete unresolved condition), `done` (accepted scope implemented with evidence), `won't-do` (rejected, superseded or closed) |
 | `assessments.<name>.state` | `not-required` (with reason), `pending`, `resolved` (obligations, exclusions and tests recorded), `blocked` |
 | `verification.state` | `undefined`, `defined` (tests and commands recorded), `passed`, `failed` (against the reported implementation) |

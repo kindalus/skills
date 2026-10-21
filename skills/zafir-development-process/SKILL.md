@@ -66,6 +66,8 @@ Each term has one meaning across these files:
 
 One party may hold several roles, but never reviews its own diff where independent review applies.
 
+**Independent reviewer:** the user, another person, or an agent session that neither wrote nor steered the diff and starts from only the diff, the spec and this process. A fresh subagent qualifies; the author's own session, or a subagent briefed with the author's conclusions, does not. Prefer another model family for transversal slices when one is available. `evidence.reviews` names the reviewer and, for an agent, its model.
+
 ## Governing context
 
 Prior decisions, domain rules, policies, contractual, security and data-integrity requirements, architectural constraints and applicable law, found in `docs/wiki/` and the repository's instructions, specs, code and docs. Check it before every decision.

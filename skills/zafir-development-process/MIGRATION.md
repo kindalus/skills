@@ -15,6 +15,12 @@ Read when migrating a register, adopting an opt-in schema option, adopting a pro
 | Z7 (phase evidence by commit trailer) is the default: the template declares it at `3.1.0`; no phase SHA is appended after the fact | New registers start with it; a `3.0.0` register adopts it by recorded decision (*Opting into 3.1.0*), recommended, and appends phase SHAs until then |
 | Slice approval decks always come from the project's deterministic renderer; `html-slide-deck` only generates the other decks | From the next slice approval; decks already approved stay valid |
 | The validator requires the `governingContext` assessment on every row and reports malformed fields instead of crashing | A register lacking `governingContext` adds it (`pending`, or `resolved` with references) in its next authorized commit |
+| The validator requires `decidedOn` on an approved spec and `tests` and `commands` on `defined` verification (and on a slice's `passed`); it warns when a blocker is not in the blocked field's own `qualifier` | A register failing these fills them from the spec and its approval record in its next authorized commit |
+| Phase-1 commits land on the integration branch, written by the integrator | Apply by default; approved specs already committed stay as they are |
+| `scripts/render_slice_deck.py` is the reference slice-deck renderer, adopted at a project's first slice approval when it has none | Projects with their own conforming renderer keep it |
+| Lite folds: phase 1 into the first phase-2 commit (`base` = its parent), phase 3 into the last green step after gate and review | From the next lite slice |
+| *Independent reviewer* defined in SKILL.md *Roles*; a fresh subagent qualifies | Apply by default |
+| Green steps no longer update `nextAction`; the implementation plan lives in the slice spec and, with the slice branch, gives the resume point inside stage 3 | Slices whose implementation starts after adoption |
 
 ## Process revision 2026-10-14
 
