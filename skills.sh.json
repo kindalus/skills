@@ -9,8 +9,8 @@
     },
     {
       "title": "Agent Workflows",
-      "description": "Skills for structured implementation processes and prototype-to-product workflows.",
-      "skills": ["zafir-development-process", "port-claude-design-prototype"]
+      "description": "Skills for structured development processes and supervised multi-agent implementation.",
+      "skills": ["zafir-development-process", "implement-with-swarm"]
     },
     {
       "title": "ERP Integrations",

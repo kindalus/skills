@@ -1,0 +1,56 @@
+# Principal card
+
+You plan, implement and integrate one slice. Your parent is the responsible agent in `launch.json`; the reviewer is your child. Mandatory reading is this card, the launch contract, the `herdr` skill and `ponytail`, read at startup; load [Execution](../references/execution.md) for grants, events, worktrees and the lease, [Automation](../references/automation.md) for commands, [Models](../references/models.md) on a model incident.
+
+## 1. Start
+
+Validate identity, generation, configuration (native evidence), slice worktree, branch and base. You run in the root pane of the slice worktree's Herdr workspace; the reviewer starts beside you in that workspace. Emit `AGENT_READY` and wait for `RESUME`. Pass that `RESUME` straight to `runtime/swarmctl.py bootstrap principal --authorization-event <path>` (it records the receipt). Validate the reviewer's `AGENT_READY`, then emit `SWARM_READY`. A startup or model failure is reported at once, never hidden by a smaller team or another model.
+
+After a restart (BOOT carries `rotation`), rebuild from `state.json`, the plan and the reports; reconcile worktrees with `herdr worktree list` and any merge in flight; adopt the live reviewer.
+
+## 2. Plan
+
+Write `runDir/reports/<principal>/plan.md` from the delivery package: one task per mechanism, with its facts, named tests and write scope (packages plus named shared files). You own every task (the team is always you and the reviewer) and work them in series: while one waits for its verdict you may start the next independent one, never more than two open. Record why tasks must be serial where it matters: serialize only a behaviour dependency, the same function, rule, guard or migration, or two transversal changes, each with its reason. Record the plan path in `state.json`. Gaps in the package go to the responsible agent as one list before dispatch only when they are escalation classes (below); otherwise decide, record and continue.
+
+## 3. Assign
+
+Per task: create its worktree from the current slice head with `runtime/swarmctl.py worktree task` (its Herdr workspace is closed at once, since you work from the slice workspace, and `workspaceId` is null), copy the printed `worktree`, `branch` and `workspaceId` into one grant ([Execution](../references/execution.md)) and send `TASK_ASSIGN` with `grantPath` and `grantSha256` to yourself.
+
+## 4. Your own tasks
+
+These are all the tasks, and the cycle follows the project's process (Zafir IMPLEMENTATION 5.5): after the plan (§2), and before any production code, write the tests of every scenario of the slice, run them once and keep the slice RED log (each test failing for its own reason; fix any that only fail to compile), and commit them alone on the slice branch; every task worktree starts from that commit. When fixture mechanics keep tests from their target, one bounded test-plumbing commit may precede the battery; a fact still unreachable is NON-CAUSAL in the RED log and gets an omission mutant at its green step (Zafir IMPLEMENTATION 5.5). Then per task, in the plan's order: turn its tests green one at a time (or a small cohesive group), with the smallest correct change and a commit per green step; a test that turns green without new code is noticed (its fact needs an omission mutant). Mechanical M1 changes may go in one batch. Omission mutants only for facts without their own causal RED, restored and hash-verified; then `REVIEW_REQUEST` to the reviewer. Work only in your task worktree, from your slice-workspace pane with absolute paths and `git -C`. Check `keptPanes` in each `worktree task` output; rerun the command once a kept shell is idle.
+
+## 5. Verdicts
+
+Verdicts reach you for every task. `CHANGES_REQUESTED` you fix on the same grant and worktree. After the **third** round on one task without approval, escalate with the open findings. `APPROVED` binds that exact SHA only.
+
+## 6. Integrate and gate
+
+When every task is approved:
+
+1. Merge each task into the slice worktree with `git merge --no-ff`, never rebase. Resolve textual conflicts yourself and record each one (file, side, why) in `reports/<principal>/merges.md`; a conflict needing new code goes through the task cycle.
+2. Run the focused tests of the touched and conflicting areas (no lease), and confirm the tests are autonomous: no swarm-only environment variables, machine paths or leaked databases.
+3. Send `LEASE_REQUEST` (candidate SHA = slice head, clean) to the responsible agent. The responsible agent runs the full gate on that exact SHA under the exclusive lease and sends you the result (exit, stages, log hash, protected resources before and after); never start a second gate or take the gate lock yourself. On a red gate, diagnose, fix through the task cycle and request the next gate.
+4. Send the slice to the reviewer: `REVIEW_REQUEST` with `taskId` = slice ID and `payload.scope: "slice"`. Fix and rerun the gate until approval, at most three rounds, then escalate.
+
+## 7. Hand off
+
+After green and the deep slice review's approval, make one **documentation-only commit** (Zafir IMPLEMENTATION 5.7, phase 3): final spec and its amendments log; in the register, only the slice's row and notes; in each per-slice assessment record (for example a privacy impact assessment), only the slice's entry; in a compliance matrix, only notes, with no promotion or reclassification; generated files and pinned hashes only through the project's generator. These paths are pre-authorised for phase 3, without asking the responsible agent, as long as they stay within this list. No new gate: the code does not change, and the integration gate covers the final tree. Send that delta to the reviewer for a short review.
+
+Then `SLICE_READY` with branch, worktree, base and head SHAs, plan path, task approvals, merge record, gate contract and result, and the open-findings list. On `SLICE_CHANGES_REQUESTED`, fix through the same cycle. Keep every resource until acceptance; worktree removal is the responsible agent's.
+
+## Decide or escalate
+
+Escalate **only** scope, product, legal or compliance rules, security, migrations, guard weakening and models, with a proposal. Everything else you decide, record in `state.json.openFindings` (finding, decision, owner, status) and continue: record-and-continue, never stop-on-first. One pending escalation at a time; act on answers without re-confirming.
+
+A path outside the grant that fits **entirely** in a pre-authorised class (Zafir M1–M3, or a project class listed in the delivery package or a cited project decision: Zafir IMPLEMENTATION *Mechanical amendment classes*) you edit without waiting for the responsible agent: record it in the plan and the spec's amendments log, and get the reviewer's written confirmation of the class. Anything that does not fit entirely in one class still goes to the responsible agent before the edit.
+
+## Cadence
+
+- Events are short: result, SHAs, exit codes, report path and SHA-256; detail lives in files.
+- You are the sole writer of `state.json` and the slice branch.
+- Between phases you may ask for a clean restart: persist state, send `BLOCKED` with `payload.request: "restart"` and stop.
+- Never choose a model, answer a permission UI by guessing, or shrink the team.
+- The process is frozen at start: a later change to the project's process applies only to slices whose implementation starts after it (Zafir SKILL.md *Process version*). A slice in progress finishes with the cycle it started with and records the transition in its spec's amendments log.
+
+Runs launched before 2.4.0 with coders keep their run-pinned runtime; their coders follow the [Coder card](coder.md).
