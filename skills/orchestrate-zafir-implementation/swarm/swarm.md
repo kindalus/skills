@@ -82,11 +82,11 @@ The Principal starts as `herdr agent start <prefix>-principal --kind codex --pan
 ## Supervise and receive
 
 - **Supervise:** keep the supervisor alive, answer escalations and lease requests, handle model incidents. Done on `SLICE_READY`, a genuine blocker or cancellation.
-- **Receive:** verify the slice SHA and minimum evidence, then integrate it in the next batch ([Integration](../integration/integration.md)) or return findings. Done when the hand-off is acknowledged.
+- **Receive:** the code integrates through the merge queue (Cycle, step 8); on the phase-3 `SLICE_READY`, verify the slice SHA and minimum evidence, then integrate the phase-3 delta as a documentation batch ([Integration](../integration/integration.md)) or return findings. Done when the hand-off is acknowledged.
 
 ## Success criteria
 
 - The team matches the roster with explicit models and an independent reviewer.
 - Every task maps to the plan, ran one cycle, and carries its minimum evidence and an approval of its exact SHA.
-- The slice was refactored with `ponytail` on green, merged with current main, passed the compliance suite, the touched guards and the full gate on its exact commit under the lease, and has the reviewer's approval; open findings are closed or escalated.
+- The slice was refactored with `ponytail` on green, merged with current main, passed the compliance suite and the touched guards, has the reviewer's deep approval, and passed the full gate under the lease on its exact commit merged with current main; open findings are closed or escalated.
 - The orchestrator receives branch, base and head SHAs, evidence and the open-findings list; no claim rests on Herdr state or agent prose.
