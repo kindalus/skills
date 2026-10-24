@@ -2,7 +2,8 @@
 
 The orchestrator is the single integrator into main. Zafir CONCURRENCY *Integration queue* and *Batches* are the procedure; this section adds only how the team feeds them.
 
-- Route each `SLICE_READY` at once by Zafir CONCURRENCY *Routing a ready slice*: an unchanged or documentation-only combined tree integrates now, alone, reusing the slice's green whole gate; a combined tree that changed in code joins the next code batch, with every slice and bug fix ready then; a conflict goes back to the swarm to merge main and gate again.
+- **Merge queue** (Zafir CONCURRENCY *Merge queue*): a slice's `LEASE_REQUEST`, sent after its deep review, is its integration. Merge current main into the slice, return a code conflict without the lease, gate the clean merge, and integrate it into main at once on green. Its phase-3 `SLICE_READY` then integrates as a documentation batch.
+- Outside the merge queue, route each `SLICE_READY` at once by Zafir CONCURRENCY *Routing a ready slice*: an unchanged or documentation-only combined tree integrates now, alone, reusing the slice's green whole gate; a combined tree that changed in code joins the next code batch, with every slice and bug fix ready then; a conflict goes back to the swarm to merge main and gate again.
 - **Merge, never rebase**, at every step. Record each conflict resolution (file, side kept, why) in its merge commit.
 - Shell output and records follow Zafir *Tool discipline*: registers and shared records merge by ID through `zafir-development-process/scripts/json_merge_by_id.py`, never by hand.
 

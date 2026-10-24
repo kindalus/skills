@@ -149,7 +149,7 @@ In doubt, the edit is a 5.4 amendment.
 
 ### 5.6 Verify
 
-Run the **whole gate** ([Green means the whole gate](SKILL.md#green-means-the-whole-gate)). One passing test is not the gate.
+Run the **whole gate** ([Green means the whole gate](SKILL.md#green-means-the-whole-gate)). One passing test is not the gate. Under a merge queue ([CONCURRENCY](CONCURRENCY.md) *Merge queue*), 5.7 comes first and this gate runs in the queue, on the slice merged with the current integration branch.
 
 **Done when:** every applicable check passes. Record `verification passed`, `evidence.tests`, and `evidence.browser` when the browser check ran. No commit: the evidence goes with phase 3.
 

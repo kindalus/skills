@@ -74,7 +74,15 @@ One integrator runs one integration at a time, in order of readiness. An integra
 - Step 7 is a plain `git merge --no-ff`.
 - The last whole gate on the frozen head ([When it runs](SKILL.md#green-means-the-whole-gate)) is the combined-tree evidence.
 
-**Routing a ready slice.** A slice merges the current integration branch before its own whole gate. When it is ready (phase 3 committed), compute its merge with the current integration branch without a worktree (`git merge-tree --write-tree`) and compare the result with the tree of its last green whole gate:
+**Merge queue.** When one exclusive lease serialises whole gates, it is the default for slices developed in parallel, and it replaces the slice's separate integration gate:
+
+1. The slice finishes its tasks and its review (5.7 before 5.6), then asks for the gate.
+2. When the lease is free, the integrator merges the current integration branch into the slice branch (queue steps 2–3). A code conflict returns the slice to its team without the lease; registers and shared records still merge by `id`.
+3. A clean merge gets the whole gate (5.6) on that exact commit, under the lease. Meanwhile an independent reviewer looks at the files both sides changed (queue step 5).
+4. Green integrates at once (queue step 7): nothing else entered under the lease, so the gated tree is the combined tree. Red returns the result.
+5. Phase 3 follows on top of the integration branch and integrates as documentation (cheap validators).
+
+**Routing a ready slice.** Outside the merge queue, a slice merges the current integration branch before its own whole gate. When it is ready (phase 3 committed), compute its merge with the current integration branch without a worktree (`git merge-tree --write-tree`) and compare the result with the tree of its last green whole gate:
 
 | Combined tree | Route | Gate |
 | --- | --- | --- |
