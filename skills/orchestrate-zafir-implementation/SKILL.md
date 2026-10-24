@@ -90,6 +90,7 @@ The Herdr state comes from `herdr agent list`; the last activity is your one-lin
 
 ## Preparers
 
+0. **Eligible.** Before opening one, read the slice's register row (`specifiable` and its reason, `dependsOn`) and the dependencies the project's plan sets for its family or phase. A slice deferred by just-in-time, or whose plan dependency is not yet integrated, gets no preparer; record its trigger in the pipeline. A slice without approved scope goes back to Zafir Steps 1–4 as an owner request, not to a preparer.
 1. **Open.** One new, dedicated preparer per slice: `preparer-<n>`, `<n>` the next free number. Split a pane in the `Preparers` tab and start it there: `herdr agent start preparer-<n> --kind pi --pane <id> -- --model openai-codex/gpt-6.1-sol --thinking high`.
 2. **Brief.** Write `J/briefs/prep-<slice>.md`: slice ID, spec path, main SHA, worktree path and branch `prep/<slice>`, the decisions and owner answers that bind it, and the path of [the preparer card](preparation/preparer.md). Prompt the preparer with the brief's path and sha256. Add `preparer-<n> <slice>` to `J/preparers.txt`.
 3. **Serve** its consultant requests from the [queue](consultants/consultants.md#queue), and carry its owner questions as owner requests.

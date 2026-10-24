@@ -17,6 +17,7 @@ Shell and Herdr lessons that bite every role. Read the `herdr` skill first; the 
 - **Read:** `herdr agent read <name> --source recent-unwrapped --lines 40` (raise `--lines` only as far as needed). When the screen hides the answer, the orchestrator recovers it from the agent's session transcript.
 - **States:** `working` is busy; `blocked` is a permission UI or a question, to answer now; `idle` and `done` are ready for input, never proof of completion; `unknown` proves nothing, so read the screen.
 - **Waiting:** to wait for a command to finish, use `prompt --wait`; `agent wait --until idle` can miss a transition that happens while it runs and return the old state. `--until working` does observe entry into work.
+- **Worktrees in large repositories:** the checkout of `herdr worktree create` can outlast its default timeout and leave the worktree locked while Git still writes. Pass a generous `--timeout`, and on a timeout wait for the checkout process to end instead of repeating the command. Stagger many creations: parallel checkouts saturate the disk and slow every gate.
 - **Labels:** `herdr pane rename <pane_id> "<name> · <slice>/<work>"` when work starts, `"<name> · free"` when it ends.
 - **Notifications** (`herdr notification show "<title>" --body "<text>" --sound request|done`) only for a slice started or closed, an agent `blocked`, a suspected stall, or a red gate.
 

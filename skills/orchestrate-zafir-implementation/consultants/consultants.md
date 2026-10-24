@@ -36,7 +36,7 @@ Clear with `herdr agent prompt <name> "<command>" --wait --timeout 300000`. A ne
 
 ## Requests
 
-A request is ready when it has:
+A request is a file in the preparer's worktree, under the slice's evidence directory (in `J/prep-<slice>/` only while the worktree is not ready), sent to the orchestrator as path and sha256. It is ready when it has:
 
 - **frozen inputs**, listed with their sha256;
 - **numbered questions**, each with options;
