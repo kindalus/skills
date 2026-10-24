@@ -2,6 +2,18 @@
 
 Versions up to 2.4.2 were released as the `implement-with-swarm` skill.
 
+## 2.7.0 — 2026-10-24
+
+Events keep only what something acts on.
+
+### Changed
+
+- **`PROGRESS` removed:** `swarmctl` rejects it as an unknown event type. Information that decides nothing (progress, waiting, a context checkpoint) is a direct Herdr message to the parent, with no event, receipt or authority (`references/execution.md` *Events*, coder card).
+
+### Compatibility
+
+- Automation version 2.7.0. Runs launched under 2.6.0 or earlier keep their run-pinned runtime and may still send `PROGRESS`.
+
 ## 2.6.0 — 2026-10-24
 
 Applies the owner-approved naming taxonomy ([Naming](../references/naming.md)): every worktree lives at `<repoPath>/.worktrees/<name>`.

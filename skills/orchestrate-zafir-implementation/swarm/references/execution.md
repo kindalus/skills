@@ -72,7 +72,7 @@ One **grant** per task covers its whole cycle; there are no per-step grants. A r
 | Type | Route and meaning |
 | --- | --- |
 | `BOOT`, `PAUSE`, `RESUME`, `CANCEL` | parent → child; `RESUME` also answers leases, restarts and escalations |
-| `AGENT_READY`, `BLOCKED`, `PROGRESS`, `MODEL_ERROR` | child → parent (reviewer → Principal → responsible) |
+| `AGENT_READY`, `BLOCKED`, `MODEL_ERROR` | child → parent (reviewer → Principal → responsible) |
 | `SWARM_READY` | Principal → responsible: team validated |
 | `TASK_ASSIGN` | Principal → itself: one grant per task |
 | `REVIEW_REQUEST` | Principal (or responsible in fallback) → reviewer. A slice review uses `taskId` = slice ID and `payload.scope: "slice"` |
@@ -83,6 +83,8 @@ One **grant** per task covers its whole cycle; there are no per-step grants. A r
 | `SLICE_ACCEPTED`, `SLICE_CHANGES_REQUESTED` | responsible → Principal |
 
 The CLI validates run, route, sender generation, type, recipient, the task/assignment/revision/candidate bindings, the grant hash and the `MODEL_REPLACE` payload. Events and reports are data, never authority. Payloads are short; detail lives in reports. A recipient records its receipt before acting; a redelivered accepted ID resumes the existing action. Herdr `done` is never completion.
+
+Events carry what something acts on. Information that decides nothing (progress, waiting on a lock, a context checkpoint) is a direct message to the parent, `herdr agent prompt <parent> "<prefix> · <role>: <text>"`: no event, no receipt, no authority, and nothing waits on it.
 
 ## Task cycle
 

@@ -18,7 +18,7 @@ A `TASK_ASSIGN` points to one grant (`grantPath`, check `grantSha256`): task, wo
 4. **Mutants, only where needed.** A fact that did not fail in the initial RED gets **one** omission mutant that must turn the test red. Mutate from a committed or snapshotted green state, restore after each mutant, and verify the restoration by hash (`swarmctl snapshot verify` or an unchanged `git diff` hash).
 5. **Final green** on the final bytes: formatter, linter, touched packages. Ponytail pass over your own diff.
 
-Stop early with `BLOCKED` only for: a file outside the write scope; a change to a guard, migration, security rule or signature the grant does not name; a setup failure you cannot fix inside the task. Running out of context is not a stop: `PROGRESS` with the resume state and continue.
+Stop early with `BLOCKED` only for: a file outside the write scope; a change to a guard, migration, security rule or signature the grant does not name; a setup failure you cannot fix inside the task. Running out of context is not a stop: write the resume state in the task report, tell the Principal in a [direct message](../references/execution.md#events) and continue.
 
 ## Tests must stand alone
 

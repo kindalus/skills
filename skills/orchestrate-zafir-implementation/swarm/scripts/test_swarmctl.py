@@ -544,7 +544,7 @@ class SwarmTest(unittest.TestCase):
         swarmctl.validate_new_launch(self.contract, self.run_dir)
         root, launch = self.init()
         self.assertEqual(swarmcore.coder_names(launch), [])
-        self.assertEqual(json.loads((root / "automation.json").read_text())["automationVersion"], "2.6.0")
+        self.assertEqual(json.loads((root / "automation.json").read_text())["automationVersion"], "2.7.0")
 
     def test_a_reloaded_launch_with_coders_still_loads(self) -> None:
         root, launch = self.legacy_init()
@@ -624,7 +624,7 @@ class SwarmTest(unittest.TestCase):
             ("orchestrator", "t123-principal", "MODEL_REPLACE",
              {"role": "coders", "configuration": "pi ollama/coder high", "incidentId": "i1"}, {}),
             ("t123-coder-a", "t123-principal", "BLOCKED", {}, {}),
-            ("t123-reviewer", "t123-principal", "PROGRESS", {}, {}),
+            ("t123-reviewer", "t123-principal", "BLOCKED", {}, {}),
             ("t123-principal", "orchestrator", "BLOCKED", {}, {}),
             ("t123-principal", "t123-reviewer", "PAUSE", {}, {}),
             ("orchestrator", "t123-principal", "RESUME", {"lease": "full-gate"}, {}),
@@ -635,6 +635,7 @@ class SwarmTest(unittest.TestCase):
                                                     recipient=recipient, event_type=kind,
                                                     payload=payload, fields=fields).is_file())
         rejected = [
+            ("t123-reviewer", "t123-principal", "PROGRESS", {}, {}),
             ("t123-coder-a", "t123-coder-b", "TASK_ASSIGN", self.grant(root), bound),
             ("orchestrator", "t123-coder-a", "TASK_ASSIGN", self.grant(root), bound),
             ("t123-principal", "t123-reviewer", "TASK_ASSIGN", self.grant(root), bound),
@@ -949,7 +950,7 @@ class SwarmTest(unittest.TestCase):
         self.assertEqual(boot["payload"]["rotation"]["statePath"], str(self.run_dir / "state.json"))
         with self.assertRaises(swarmctl.SwarmError):
             swarmctl.send_event(root, launch, sender="t123-principal", generation=1, recipient="orchestrator",
-                                event_type="PROGRESS", payload={})
+                                event_type="AGENT_READY", payload={})
         swarmctl.send_event(root, launch, sender="t123-principal", generation=2, recipient="orchestrator",
                             event_type="AGENT_READY", payload={})
         again = swarmctl.bootstrap_responsible(self.contract_path, self.run_dir, dry_run=False,

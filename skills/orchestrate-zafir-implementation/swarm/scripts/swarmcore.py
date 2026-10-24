@@ -20,7 +20,7 @@ import tempfile
 import uuid
 from typing import Any, Iterable
 
-VERSION = "2.6.0"
+VERSION = "2.7.0"
 # Every worktree lives at <repoPath>/.worktrees/<name> (references/naming.md of the skill).
 WORKTREES_DIR = ".worktrees"
 AGENT_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
@@ -37,7 +37,7 @@ EVENT_TYPES = {
     "BOOT", "AGENT_READY", "SWARM_READY", "TASK_ASSIGN", "REVIEW_REQUEST",
     "CHANGES_REQUESTED", "APPROVED", "TASK_INTEGRATED", "LEASE_REQUEST", "LEASE_RELEASE",
     "BLOCKED", "MODEL_ERROR", "MODEL_REPLACE", "PAUSE", "RESUME", "CANCEL",
-    "SLICE_READY", "SLICE_ACCEPTED", "SLICE_CHANGES_REQUESTED", "PROGRESS",
+    "SLICE_READY", "SLICE_ACCEPTED", "SLICE_CHANGES_REQUESTED",
 }
 MAX_JSON_BYTES = 1024 * 1024
 MAX_ARTIFACT_BYTES = 100 * 1024 * 1024
@@ -463,7 +463,7 @@ def validate_route(event_type: str, sender: str, recipient: str, launch: dict[st
     allowed = False
     if event_type in {"BOOT", "PAUSE", "RESUME", "CANCEL"}:
         allowed = parent_of(recipient, launch) == sender
-    elif event_type in {"AGENT_READY", "BLOCKED", "MODEL_ERROR", "PROGRESS"}:
+    elif event_type in {"AGENT_READY", "BLOCKED", "MODEL_ERROR"}:
         allowed = recipient == parent_of(sender, launch)
     elif event_type == "MODEL_REPLACE":
         allowed = sender == responsible and recipient == principal
