@@ -107,7 +107,7 @@ Step 6 aggregates them from Git. They may be reviewed at any integration, not on
 
 ## Registers and shared records
 
-- Merge the register **by `id`**, never as a whole file:
+- Merge the register **by `id`**, by script ([Tool discipline](SKILL.md#tool-discipline)), never as a whole file:
   - apply the candidate's row changes and new notes onto the authoritative register;
   - keep the authoritative scheduling fields (`dependsOn`, `parallelAllowed`, envelope);
   - recompute readiness.

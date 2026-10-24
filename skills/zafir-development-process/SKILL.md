@@ -9,7 +9,7 @@ license: MIT
 
 Features follow **governing context → brainstorm → architecture/design → slices → preparation → implementation → integration → closure**. No feature starts at slicing. Short paths serve bug fixes, trivial changes and refactors. Effort scales with risk ([Risk lanes](#risk-lanes)). This skill installs nothing and leaves `AGENTS.md` untouched.
 
-**Process version 2026-10-21.** A slice whose implementation (5.5) started under an earlier version finishes under that version, with a dated note in its spec. Each revision, and the project actions it requires, is in [MIGRATION](MIGRATION.md).
+**Process version 2026-10-24.** A slice whose implementation (5.5) started under an earlier version finishes under that version, with a dated note in its spec. Each revision, and the project actions it requires, is in [MIGRATION](MIGRATION.md).
 
 ## Read the applicable procedure
 
@@ -22,7 +22,7 @@ Start at Step 0. Read each step's file before acting on that step: links are req
 | 3.1–3.2 Architecture, design | `architecture.md`, `design.md` (or deferral) | on approval | PLANNING; [ARCHITECTURE-GUIDELINE](ARCHITECTURE-GUIDELINE.md) in 3.1 |
 | 4 Plan | slice specs, register rows, decided order | on agreement | PLANNING, [SLICE-DISCIPLINE](SLICE-DISCIPLINE.md) |
 | 5.1–5.4 Prepare | impact map, feasible scenarios, delivery package, approved slice spec | phase 1 (base) | [PREPARATION](PREPARATION.md), SPEC-LAYOUT |
-| 5.5–5.7 Implement | plan, all the slice's tests (RED), then green one test at a time, whole gate, independent review | phase 2, phase 3 | [IMPLEMENTATION](IMPLEMENTATION.md) |
+| 5.5–5.7 Implement | plan, all the slice's tests (RED), then green one test at a time, `ponytail` refactor, whole gate, independent review | phase 2, phase 3 | [IMPLEMENTATION](IMPLEMENTATION.md) |
 | Integration | merged slice or batch, combined-tree gate | integration | [CONCURRENCY](CONCURRENCY.md) |
 | 6 Close | closed feature, metrics | closing | IMPLEMENTATION |
 
@@ -144,6 +144,19 @@ Such a commit runs the project's cheap validators on what changed instead: the r
 - Stage exactly the files the phase produced (check `git status`), and leave user work unstaged.
 - Commit each phase at its marker; never defer work to a catch-all commit.
 - Slice commits carry the trailers `Slice: <id>` and `Phase: 1|2|3|integration`. The trailers are their evidence ([Z7](REGISTER-SCHEMA.md#rules-z1z7)).
+
+### Tool discipline
+
+Reads and writes go through tools, so the context holds only what the step needs:
+
+- **JSON** (registers, matrices, assessments, manifests): read and write only with `jq` or Python, addressing records by ID, and merge records by ID by script, looking only at the changed lines. A whole JSON file is never opened to answer a question about one record. This skill's `scripts/json_get.py FILE 'table[<id>]'` reads a record by ID or path; `scripts/json_merge_by_id.py TARGET SOURCE` merges by ID and prints only the changed lines (a dry run until `--write`).
+- **Hashes:** compute them with `sha256sum` or `hashlib`, and check them with `sha256sum -c` or a script that prints the count and the mismatches. A hash is checked by tool, never by reading the file.
+- **Markdown and code:** read through graft (`graft ask "<question>" --source`, `graft skeleton <file>`, `graft grep "<literal>"`) or `rg -n` followed by a line range. Open a whole document only when a step requires reading it in full.
+- **Shell output:** bound every command whose output may exceed about 40 lines with `head`, `tail` or a scripted summary (counts, mismatches, first occurrences). Validators and listings print their summary and the failing cases.
+
+### Talking to the user
+
+Every message to the user is concise and clear: the result or the decision needed first, then only what the user needs to act, in a table whenever the content has rows (options, slices, findings, states). Before sending, read `~/.agents/skills/unslop/SKILL.md` and apply its patterns to the draft.
 
 ## Risk lanes
 

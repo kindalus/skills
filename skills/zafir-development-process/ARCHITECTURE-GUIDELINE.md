@@ -8,6 +8,10 @@ This is a recommendation, not a rule of the Zafir process; process vocabulary is
 - **Effect:** from then on, Step 5.5 implements within the recorded style and Step 5.7 checks it.
 - **Change:** the style changes only by an approved Decisions entry or an explicit user instruction, recorded the same way.
 
+## Ports for every I/O operation
+
+Whatever style is chosen, including none, recommend in 3.1 and prefer in 5.5 a **port** for every I/O operation: database, clock, network, filesystem, randomness and external services. Domain and application code depend on the port; adapters implement it at the seams in `architecture.md`, and tests use in-memory adapters that pass the same contract suite ([Contracts and placeholders](SLICE-DISCIPLINE.md#contracts-and-placeholders)). Under DDD, repositories are such ports.
+
 ## When it fits
 
 - **Lite project** (`Profile: lite`; see [Profile and architecture style](SPEC-LAYOUT.md#profile-and-architecture-style)): usually not. A project that is mostly CRUD over a simple model has no domain logic for a domain layer to hold. The Four Principles, seams, contracts and acceptance tests already give it what it needs. Recommend `none`, unless the user sees rules the CRUD hides.

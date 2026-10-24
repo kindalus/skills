@@ -61,6 +61,11 @@ Take the red tests in the plan's order, one test (or one small cohesive group) a
 
 A purely mechanical change (M1: a rename, an argument propagated to consumers) may be done in one batch.
 
+**Refactor**, once every test of the slice is green and before 5.6 and the review: apply the `ponytail` skill to the slice's diff. Behaviour stays as it is, and every test stays green.
+
+verify: every test is green after the refactor.
+**Commit (phase 2, refactor):** the refactor alone. When `ponytail` changes nothing, record that in the plan instead.
+
 Rules that hold across the three stages:
 
 - **One causal proof per fact.**
@@ -96,11 +101,12 @@ commit 2  tests S1-S3, run once; RED log:
 commit 3  T1 reject an invoice without lines before any write: S2 green; S1 red; S3 green
 commit 4  T2 issue, persist and audit: S1-S3 green
             S3 mutant: drop the early return -> S3 red -> restore -> S3 green
+commit 5  refactor with ponytail: S1-S3 still green
 gate      whole gate (5.6), review (5.7), phase 3
-trailers  commits 1-4: "Slice: invoicing-03" and "Phase: 2"
+trailers  commits 1-5: "Slice: invoicing-03" and "Phase: 2"
 ```
 
-**Done when:** every original and derived scenario has a passing test.
+**Done when:** every original and derived scenario has a passing test, and the refactor is committed or recorded as empty.
 
 ### Scope changes
 

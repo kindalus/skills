@@ -10,6 +10,15 @@ Terms follow [Terms](SKILL.md#terms). Read this file when you:
 
 Every migration is proposed, approved by the user and recorded in a dated note. Never migrate silently.
 
+## Process revision 2026-10-24
+
+| Change | Project action |
+| --- | --- |
+| 5.5 stage 3 ends with a refactor by the `ponytail` skill once every test is green, committed alone before 5.6 and the review | Slices whose implementation starts after adoption |
+| [Tool discipline](SKILL.md#tool-discipline): JSON by `jq` or Python by ID, merges by script (`scripts/json_get.py`, `scripts/json_merge_by_id.py`); hashes by tool; Markdown and code through graft or `rg -n` plus a line range; shell output bounded to about 40 lines | Apply by default |
+| [Talking to the user](SKILL.md#talking-to-the-user): concise messages, tables where possible, `unslop` patterns applied before sending | Apply by default |
+| [Ports for every I/O operation](ARCHITECTURE-GUIDELINE.md#ports-for-every-io-operation) are recommended in 3.1 and preferred in 5.5 | From the next 3.1 recommendation or slice; existing code is not reworked for it |
+
 ## Process revision 2026-10-21
 
 | Change | Project action |

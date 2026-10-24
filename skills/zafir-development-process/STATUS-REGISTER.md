@@ -13,12 +13,12 @@ Read before any register read or write. Terms follow [Terms](SKILL.md#terms). Th
 
 ## Safe update procedure for a skill
 
-1. Parse the register with a JSON library. Read `schemaVersion`, `columns`, `rules` and the vocabularies.
+1. Parse the register with `jq` or Python ([Tool discipline](SKILL.md#tool-discipline)). Read `schemaVersion`, `columns`, `rules` and the vocabularies.
 2. Locate rows by `id`, never by position.
 3. Validate the requested transition before changing data.
 4. Recompute readiness for the changed row and every transitive dependent.
 5. Add a dated note when the change carries decision context.
-6. Preserve unrelated keys and row order. Serialize with stable formatting.
+6. Preserve unrelated keys and row order. Serialize with stable formatting; write rows by ID through a script such as `scripts/json_merge_by_id.py`, and check its printed diff.
 7. Run the invariants:
    - with the project's validator, when it has one;
    - otherwise with this skill's `python3 scripts/validate_register.py <register>`, which handles v3 registers and reports the checks it cannot make;
