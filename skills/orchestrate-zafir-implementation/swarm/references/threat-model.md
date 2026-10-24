@@ -39,7 +39,7 @@ Untrusted inputs cross the interface through launch JSON, event/report JSON, mod
 | Event/report flooding | 1 MiB JSON limit, compact projections, persistent backoff, one prompt per recipient per cycle |
 | Credential leakage | Run directory mode `0700`, files `0600`/`0400`, no environment dumps or unsanitized provider payloads |
 | Supervisor failure | PID/lock plus `supervision/status.json`; responsible verifies heartbeat during supervision |
-| Unsafe cleanup | Cleanup remains a separately authorized decision of the responsible agent. `worktree remove` only executes it: this run's checkouts, clean, head contained in the named ref, no live agent in the workspace (Herdr kills pane processes on removal), never `--force`, branch kept; never `workspace close --group`. Empty-pane closing (`worktree task`, `review`, `close`) touches only idle shells (no agent, the shell as sole foreground process) with a plain `pane close` or `workspace close`; a busy pane is kept and reported |
+| Unsafe cleanup | Cleanup remains a separately authorized decision of the responsible agent. `worktree remove` only executes it: this run's checkouts (the slice worktree, task worktrees recorded in `state.json`, its own review checkouts; `.worktrees/` is shared with other slices, so a name alone proves nothing), clean, head contained in the named ref, no live agent in the workspace (Herdr kills pane processes on removal), never `--force`, branch kept; never `workspace close --group`. Empty-pane closing (`worktree task`, `review`, `close`) touches only idle shells (no agent, the shell as sole foreground process) with a plain `pane close` or `workspace close`; a busy pane is kept and reported |
 
 ## Fail-closed conditions
 

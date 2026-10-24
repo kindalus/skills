@@ -4,17 +4,17 @@ The run directory is the source of truth for team coordination. The project's tr
 
 ## Names and layout
 
-Agents are `<prefix>-principal` and `<prefix>-reviewer`. Herdr names match `[a-z][a-z0-9_-]{0,31}`, so the prefix has at most 21 characters: use the slice code when valid, otherwise a short recorded slug. On a live-name collision, look for a resumable run or choose another recorded prefix; never take over an unrelated agent.
+Agent names, pane titles, worktree paths, branches and workspace labels follow [Naming](../../references/naming.md#table), with the launch contract's `prefix` as `<slice>`. Herdr names match `[a-z][a-z0-9_-]{0,31}`, so the prefix has at most 21 characters: use the lowercase slice ID when valid, otherwise a short recorded slug. On a live-name collision, look for a resumable run or choose another recorded prefix; never take over an unrelated agent.
 
 Every worktree is its own Herdr workspace, linked to the repository ([Worktrees](#worktrees-and-integration)). The team lives in the slice workspace, never in tabs of the responsible agent's workspace:
 
 ```text
-Workspace s463 (slice worktree)
-  +----------------+---------------+
-  | s463-principal | s463-reviewer |
-  | (root pane)    |               |
-  +----------------+---------------+
-Workspace s463-t01 (task worktree): closed at once; the checkout and branch stay
+Workspace s463, tab s463 (slice worktree .worktrees/s463)
+  +------------------+-----------------+
+  | s463 · principal | s463 · reviewer |
+  | (root pane)      |                 |
+  +------------------+-----------------+
+Workspace s463-t01 (task worktree .worktrees/s463-t01): closed at once; the checkout and branch stay
 ```
 
 **No pane without an agent.** `swarmctl` starts each agent only once its pane is an available shell (see [Automation](automation.md#shell-readiness)) and closes the shells the team does not use: only an idle shell (at its prompt, no foreground command, no agent), only with a plain `pane close` or `workspace close`, never `--group`. A busy shell is kept and reported, and the next rerun of the same command closes it.
@@ -49,7 +49,7 @@ One **grant** per task covers its whole cycle; there are no per-step grants. A r
 ```json
 {
   "taskId": "S463-T02", "assignmentId": "<uuid>", "owner": "s463-principal",
-  "worktree": "/abs/worktrees/s463/t02", "branch": "task/s463/t02", "workspaceId": null,
+  "worktree": "/abs/repo/.worktrees/s463-t02", "branch": "task/s463/t02", "workspaceId": null,
   "baseSha": "<sha>",
   "facts": [{"id": "C04", "test": "TestInvoiceKeepsOccurredAt"}],
   "writeScope": {"packages": ["apps/api/internal/billing"], "files": ["apps/api/cmd/api/routes.go"]},
@@ -97,15 +97,17 @@ assigned → red → green → in-review → approved → integrated
 ## Worktrees and integration
 
 ```text
-main checkout (repoPath)                    untouched by the team; Herdr's repo parent workspace
-worktreeRoot/<prefix>/slice                 slice/<prefix>, workspace <prefix> (Principal only)
-worktreeRoot/<prefix>/t01                   task/<prefix>/t01, workspace <prefix>-t01 (closed at once)
-worktreeRoot/<prefix>/reviews/<task>-r<n>   detached candidate SHA, workspace <prefix>-<task>-r<n> (reviewer)
+main checkout (repoPath)   untouched by the team; Herdr's repo parent workspace; holds the excluded .worktrees/
+slice worktree             the Principal's; its workspace stays open
+task worktree              one per task; its workspace closes at once
+review checkout            detached at the candidate SHA, one per task revision; the reviewer's
 ```
+
+Paths, branches and workspace labels are the Naming rows; each workspace label is its worktree's directory name. `worktreeRoot` is `<repoPath>/.worktrees` and the slice worktree `<worktreeRoot>/<prefix>`; a new launch contract may omit both, and any other value is rejected. `worktree close` and `worktree remove` accept only the slice worktree, a task worktree recorded in `state.json`, and this run's review checkouts, since other slices share the directory.
 
 Inside Herdr (`HERDR_ENV=1`) every worktree is created through Herdr so it gets its own workspace linked to the repository. Use the `swarmctl` commands, which wrap the Herdr calls, validate Git first and fail closed ([Automation](automation.md#worktrees)):
 
-- **Slice:** `bootstrap responsible` runs `herdr worktree create --cwd <repoPath> --branch <slice> --base <baseSha> --path <slice worktree> --label <prefix> --no-focus`. `repoPath` must be the main checkout: Herdr refuses to create from a linked worktree.
+- **Slice:** `bootstrap responsible` runs `herdr worktree create --cwd <repoPath> --branch <slice branch> --base <baseSha> --path <slice worktree> --label <prefix> --no-focus`, then labels the workspace and its tab and titles the Principal's pane; `bootstrap principal` titles the reviewer's. `repoPath` must be the main checkout: Herdr refuses to create from a linked worktree.
 - **Task:** `swarmctl worktree task` does the same from the current slice head and closes the new workspace at once, since the Principal works from the slice workspace. Herdr checks out an existing branch as it is and ignores `--base`, so the script checks the branch head first.
 - **Review:** Herdr has no detached checkout: `worktree create` without `--branch` invents a `worktree/<name>` branch. `swarmctl worktree review` therefore runs `git worktree add --detach` at the exact candidate SHA, checks it is clean, and opens it with `herdr worktree open`. After the verdict the reviewer closes that workspace with `swarmctl worktree close`, which keeps the checkout; the next `worktree review` also closes any earlier review workspace left open and idle.
 - **Reconcile** with `herdr worktree list --cwd <repoPath>`: it lists every Git worktree of the repository with `open_workspace_id` (null when no workspace shows it). Resume and adoption reopen a closed checkout with `herdr worktree open`, which returns the open workspace unchanged when there is one; a closed workspace is normal state (`workspaceId: null`), never an error. A task stays closed on a rerun.

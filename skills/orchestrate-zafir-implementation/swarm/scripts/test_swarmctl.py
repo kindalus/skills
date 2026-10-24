@@ -188,6 +188,18 @@ with open(str(state_path)+'.lock','a+') as lock:
         if agent is None: fail('agent_not_found',name)
         log({'command':'prompt','target':name,'message':message})
         result({'agent':agent,'type':'agent_prompted'})
+    if args[:2]==['pane','rename']:
+        p=state['panes'].get(args[2])
+        if p is None: fail('pane_not_found',args[2])
+        p['title']=' '.join(args[3:]);log({'command':'pane-rename','args':args});result({'pane':p,'type':'pane_info'})
+    if args[:2]==['tab','rename']:
+        t=state['tabs'].get(args[2])
+        if t is None: fail('tab_not_found',args[2])
+        t['label']=' '.join(args[3:]);log({'command':'tab-rename','args':args});result({'tab':t,'type':'tab_info'})
+    if args[:2]==['workspace','rename']:
+        w=state['workspaces'].get(args[2])
+        if w is None: fail('workspace_not_found',args[2])
+        w['label']=' '.join(args[3:]);log({'command':'workspace-rename','args':args});result({'workspace':w,'type':'workspace_info'})
     if args[:2]==['notification','show']:
         log({'command':'notify','args':args})
         result({'type':'notification_shown'})
@@ -208,18 +220,19 @@ class SwarmTest(unittest.TestCase):
         (self.repo / "tracked.txt").write_text("original\n")
         subprocess.run(["git", "add", "."], cwd=self.repo, check=True)
         subprocess.run(["git", "commit", "-qm", "base"], cwd=self.repo, check=True)
+        with (self.repo / ".git/info/exclude").open("a") as exclude:
+            exclude.write("/.worktrees/\n")  # as scripts/preflight.sh --project leaves it
         self.base = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.repo, text=True).strip()
         self.run_id = str(uuid.uuid4())
         self.run_dir = self.temp / "state" / self.run_id
-        self.worktree_root = self.temp / "worktrees" / self.run_id
+        self.worktree_root = self.repo / ".worktrees"
         ponytail_path = self.temp / "ponytail" / "SKILL.md"
         ponytail_path.parent.mkdir()
         ponytail_path.write_text("# Ponytail test fixture\n")
         self.contract = {
             "runId": self.run_id, "prefix": "t123", "sliceId": "T123",
             "specPath": str(self.repo / "spec.md"), "repoPath": str(self.repo), "baseSha": self.base,
-            "slice": {"branch": f"swarm/t123-{self.run_id[:8]}",
-                      "worktree": str(self.worktree_root / "slice")},
+            "slice": {"branch": "slice/t123", "worktree": str(self.worktree_root / "t123")},
             "responsible": {"agent": "orchestrator", "paneId": "p0", "workspaceId": "w1", "session": "test"},
             "worktreeRoot": str(self.worktree_root), "runDir": str(self.run_dir),
             "skillRoot": str(HERE.parent),
@@ -531,7 +544,7 @@ class SwarmTest(unittest.TestCase):
         swarmctl.validate_new_launch(self.contract, self.run_dir)
         root, launch = self.init()
         self.assertEqual(swarmcore.coder_names(launch), [])
-        self.assertEqual(json.loads((root / "automation.json").read_text())["automationVersion"], "2.5.0")
+        self.assertEqual(json.loads((root / "automation.json").read_text())["automationVersion"], "2.6.0")
 
     def test_a_reloaded_launch_with_coders_still_loads(self) -> None:
         root, launch = self.legacy_init()
@@ -1072,13 +1085,101 @@ class SwarmTest(unittest.TestCase):
         sha = self.git("rev-parse", "HEAD")
         first = swarmctl.review_worktree(root, launch, "T123-T01", 1, sha)
         path = pathlib.Path(first["path"])
-        self.assertEqual(path, self.worktree_root.resolve() / "t123" / "reviews" / "t123-t01-r1")
+        self.assertEqual(path, self.worktree_root.resolve() / "t123-review-t01-r1")
         self.assertEqual(self.git("rev-parse", "HEAD", cwd=path), sha)
         self.assertEqual(self.git("branch", "--show-current", cwd=path), "")
         again = swarmctl.review_worktree(root, launch, "T123-T01", 1, sha)
         self.assertEqual((again["action"], again["workspaceId"]), ("adopt", first["workspaceId"]))
         with self.assertRaisesRegex(swarmctl.SwarmError, "not detached at the candidate"):
             swarmctl.review_worktree(root, launch, "T123-T01", 1, self.base)
+
+    # Naming taxonomy (2.6.0): every worktree at <repoPath>/.worktrees/<name>
+
+    def test_the_layout_defaults_to_dot_worktrees_in_the_main_checkout(self) -> None:
+        dot = self.repo / ".worktrees"
+        bare = {k: v for k, v in self.contract.items() if k not in ("worktreeRoot", "slice")}
+        launch = swarmctl.validate_new_launch(bare, self.run_dir)
+        self.assertEqual((launch["worktreeRoot"], launch["slice"]),
+                         (str(dot), {"branch": "slice/t123", "worktree": str(dot / "t123")}))
+        partial = swarmctl.validate_new_launch(dict(bare, slice={"branch": "slice/t123-redo"}), self.run_dir)
+        self.assertEqual(partial["slice"], {"branch": "slice/t123-redo", "worktree": str(dot / "t123")})
+        self.assertNotIn("worktreeRoot", bare)  # the caller's contract is not mutated
+        self.contract_path.write_text(json.dumps(bare))
+        root, _launch = self.init()
+        saved = json.loads((root / "launch.json").read_text())
+        self.assertEqual((saved["worktreeRoot"], saved["slice"]["worktree"]), (str(dot), str(dot / "t123")))
+        plan = swarmctl.bootstrap_responsible(self.contract_path, self.run_dir, dry_run=True,
+                                              no_supervisor=True)["plan"]["worktree"]
+        self.assertEqual(plan["argv"][plan["argv"].index("--path") + 1], str(dot / "t123"))
+
+    def test_a_worktree_outside_the_taxonomy_fails_closed(self) -> None:
+        outside = self.temp / "worktrees"
+        dot = self.worktree_root
+        rejected = [({"worktreeRoot": str(outside), "slice": {"branch": "slice/t123", "worktree": str(outside / "t123")}},
+                     "worktreeRoot must be <repoPath>/.worktrees"),
+                    ({"worktreeRoot": str(self.repo), "slice": {"branch": "slice/t123", "worktree": str(self.repo / "t123")}},
+                     "worktreeRoot must be <repoPath>/.worktrees"),
+                    ({"slice": {"branch": "slice/t123", "worktree": str(dot / "slice")}},
+                     "slice.worktree must be <repoPath>/.worktrees/<prefix>"),
+                    ({"slice": {"branch": "slice/t123", "worktree": str(dot / "t123" / "slice")}},
+                     "slice.worktree must be <repoPath>/.worktrees/<prefix>"),
+                    ({"runDir": str(self.repo / "state")}, "runDir and the repository must be disjoint")]
+        for change, message in rejected:
+            contract = {**self.contract, **change}
+            self.contract_path.write_text(json.dumps(contract))
+            run_dir = pathlib.Path(contract["runDir"])
+            with self.subTest(change=change):
+                with self.assertRaisesRegex(swarmctl.SwarmError, message):
+                    swarmctl.validate_new_launch(contract, run_dir)
+                with self.assertRaisesRegex(swarmctl.SwarmError, message):
+                    swarmctl.init_run(self.contract_path, run_dir)
+                with self.assertRaisesRegex(swarmctl.SwarmError, message):
+                    swarmctl.bootstrap_responsible(self.contract_path, run_dir, dry_run=True, no_supervisor=True)
+                self.assertFalse(run_dir.exists())
+        self.assertEqual(self.log_entries("worktree-create"), [])
+
+    def test_task_and_review_checkouts_are_siblings_under_dot_worktrees(self) -> None:
+        responsible, root, launch = self.bootstrap_team()
+        dot = self.worktree_root.resolve()
+        with self.principal_pane(responsible["principal"]["paneId"]):
+            task = swarmctl.task_worktree(root, launch, "T123-T01", "t01", "t123-principal", self.base)
+            for name in ("preparation", "admission", "review", "review-t01"):
+                with self.subTest(name=name), self.assertRaisesRegex(swarmctl.SwarmError, "reserved"):
+                    swarmctl.task_worktree(root, launch, "T123-T09", name, "t123-principal", self.base)
+        self.assertEqual((task["worktree"]["path"], task["worktree"]["branch"]),
+                         (str(dot / "t123-t01"), "task/t123/t01"))
+        create = self.log_entries("worktree-create")[-1]["args"]
+        self.assertEqual(create[create.index("--label") + 1], "t123-t01")
+        slice_review = swarmctl.review_worktree(root, launch, "T123", 1, self.base)
+        task_review = swarmctl.review_worktree(root, launch, "T01", 2, self.base)
+        self.assertEqual((slice_review["path"], task_review["path"]),
+                         (str(dot / "t123-review-slice-r1"), str(dot / "t123-review-t01-r2")))
+        opened = self.log_entries("worktree-open")[-1]["args"]
+        self.assertEqual(opened[opened.index("--label") + 1], "t123-review-t01-r2")
+
+    def test_bootstrap_labels_the_slice_workspace_and_titles_both_panes(self) -> None:
+        responsible, _root, _launch = self.bootstrap_team()
+        fake = self.fake()
+        workspace, tab = responsible["principal"]["workspaceId"], responsible["principal"]["tabId"]
+        reviewer = fake["agents"]["t123-reviewer"]["pane_id"]
+        self.assertEqual((fake["workspaces"][workspace]["label"], fake["tabs"][tab]["label"]), ("t123", "t123"))
+        self.assertEqual((fake["panes"][responsible["principal"]["paneId"]]["title"], fake["panes"][reviewer]["title"]),
+                         ("t123 \u00b7 principal", "t123 \u00b7 reviewer"))
+        self.quit_agent("t123-principal")
+        swarmctl.rotate_principal(self.run_dir, "clean restart between phases")
+        retitled = self.log_entries("pane-rename")[-1]["args"]
+        self.assertEqual(retitled[2:], [responsible["principal"]["paneId"], "t123 \u00b7 principal"])
+
+    def test_close_and_remove_refuse_an_unrecorded_sibling_checkout(self) -> None:
+        responsible, root, launch = self.bootstrap_team()
+        stray = self.worktree_root / "t123-t07"
+        self.git("worktree", "add", "-q", "-b", "task/t123/t07", str(stray), self.base)
+        with self.principal_pane(responsible["principal"]["paneId"]):
+            with self.assertRaisesRegex(swarmctl.SwarmError, "only this run's task or review checkouts"):
+                swarmctl.close_worktree(root, launch, stray)
+        with self.assertRaisesRegex(swarmctl.SwarmError, "only this run's worktrees"):
+            swarmctl.remove_worktree(root, launch, stray, "main")
+        self.assertTrue(stray.is_dir())
 
     def test_remove_is_unforced_and_only_for_clean_contained_unoccupied_worktrees(self) -> None:
         responsible, root, launch = self.legacy_team()

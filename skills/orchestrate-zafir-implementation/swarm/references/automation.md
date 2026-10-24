@@ -10,7 +10,7 @@ A fresh run copies the CLI, its internal bootstrap/core modules, and `swarmd.py`
 
 ## Bootstrap
 
-The launch input uses the launch-contract shape from `swarm.md`, including a fresh UUID `runId`, `roster`, absolute paths, immutable `baseSha`, exact model triples, responsible identity, and the intended slice branch/worktree. A contract that still carries `tier` or `models.reviewers` is rejected (2.0.0).
+The launch input uses the launch-contract shape from `swarm.md`, including a fresh UUID `runId`, `roster`, absolute paths, immutable `baseSha`, exact model triples, responsible identity, and the slice branch/worktree and `worktreeRoot` (omitted, they default to [Naming](../../references/naming.md#table); any other layout is rejected). A contract that still carries `tier` or `models.reviewers` is rejected (2.0.0).
 
 ```bash
 # Read-only validation and plan.
@@ -30,7 +30,7 @@ The Principal receipts `BOOT`, validates its effective runtime through native ev
   --run-dir "$RUN_DIR" --authorization-event "$RESUME_EVENT"
 ```
 
-This command starts `<prefix>-reviewer` beside the Principal in the slice workspace, after reserving and journaling its pane and BOOT event (only for runs launched before 2.4.0: also `coder-a`/`coder-b` in a `<prefix>-coders` tab, when `roster.coders` is 1 or 2). It starts no productive task. The Principal still validates each child `AGENT_READY` before emitting `SWARM_READY`.
+This command starts the reviewer beside the Principal in the slice workspace, after reserving and journaling its pane and BOOT event (only for runs launched before 2.4.0: also `coder-a`/`coder-b` in a `<prefix>-coders` tab, when `roster.coders` is 1 or 2). It starts no productive task. The Principal still validates each child `AGENT_READY` before emitting `SWARM_READY`.
 
 Optional clean restart of a gracefully quit Principal (procedure in the [Responsible card](../roles/responsible.md); `rotate-principal` remains an alias):
 

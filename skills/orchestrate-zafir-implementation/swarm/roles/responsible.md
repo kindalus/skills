@@ -14,7 +14,7 @@ Use `SWARMCTL=<skillRoot>/scripts/swarmctl.py` until the run exists, then `runDi
 
 ## Bootstrap
 
-`bootstrap responsible` creates the run, the slice worktree in its own Herdr workspace (`herdr worktree create`), the Principal in that workspace's root pane, its `BOOT` and the supervisor. Your own workspace gets no swarm tabs. Validate the Principal's `AGENT_READY` against native evidence, receipt it, and send `RESUME` with `{"bootstrapChildrenAuthorized": true}`. Done when its `SWARM_READY` checks out.
+`bootstrap responsible` creates the run, the slice worktree in its own Herdr workspace (`herdr worktree create`, at its [Naming](../../references/naming.md#table) path), the Principal in that workspace's root pane, its `BOOT` and the supervisor. Your own workspace gets no swarm tabs. Validate the Principal's `AGENT_READY` against native evidence, receipt it, and send `RESUME` with `{"bootstrapChildrenAuthorized": true}`. Done when its `SWARM_READY` checks out.
 
 ## Supervise
 

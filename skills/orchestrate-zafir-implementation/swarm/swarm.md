@@ -39,7 +39,7 @@ A swarm implements one approved slice (Zafir 5.5–5.7) from the project's **del
 - **Escalate only** scope, product, legal or compliance rules, security, migrations, guard weakening and models to the orchestrator, which takes the owner's classes to the owner. The Principal decides everything else, records it in the open-findings list and continues: record-and-continue, never stop-on-first.
 - **Autonomous tests:** every test passes inside the project's full gate alone: no swarm-only environment variables, machine paths, or leaked database roles or databases.
 - **Host:** focused runs go in parallel without a lease, on resources the agent owns. The full gate, browser runs and fixed ports need the exclusive lease.
-- **Worktrees are Herdr workspaces:** slice and task worktrees come from `herdr worktree create`, review checkouts are opened with `herdr worktree open`, all through `swarmctl`; the team runs in the slice and task workspaces, never in the orchestrator's. **No pane without an agent:** `swarmctl` waits for each new pane to be an available shell before `agent start`, and closes the idle shells nobody uses (a Principal task's workspace, a review workspace after its verdict). Removal is `herdr worktree remove`, after acceptance and an authorized cleanup; never `workspace close --group` ([Execution](references/execution.md#worktrees-and-integration)).
+- **Worktrees are Herdr workspaces**, at the paths of [Naming](../references/naming.md#table): slice and task worktrees come from `herdr worktree create`, review checkouts are opened with `herdr worktree open`, all through `swarmctl`; the team runs in the slice and task workspaces, never in the orchestrator's. **No pane without an agent:** `swarmctl` waits for each new pane to be an available shell before `agent start`, and closes the idle shells nobody uses (a Principal task's workspace, a review workspace after its verdict). Removal is `herdr worktree remove`, after acceptance and an authorized cleanup; never `workspace close --group` ([Execution](references/execution.md#worktrees-and-integration)).
 - **Merge, never rebase:** phase SHAs are evidence; each conflict resolution is recorded (file, side, why).
 - **Guards only get stricter**; a looser guard is an escalation.
 - **Model incidents** go through `MODEL_ERROR` and `MODEL_REPLACE`; nobody substitutes a model or shrinks the team.
@@ -67,17 +67,17 @@ A missing required skill is reported, never silently substituted.
 
 | Input | Requirement |
 | --- | --- |
-| `sliceId`, `prefix` | Stable slice code; Herdr prefix of at most 21 characters |
+| `sliceId`, `prefix` | Stable slice code; `prefix` is the `<slice>` of [Naming](../references/naming.md#table), at most 21 characters |
 | `specPath` | Absolute path to the approved spec and its delivery package |
 | `repoPath`, `baseSha` | The repository's main checkout (Herdr creates worktrees only from it) and the immutable starting commit |
 | `processPaths` | Applicable instructions; commands for the full gate, the compliance suite and focused tests; commit and merge policy; the admission file with its dispatch notes |
 | `roster` | `{"coders": 0}` (always; owner decision 2026-10-14) |
 | `models` | `principal` and `reviewer`, each `harness model thinking_effort` |
-| `responsible` | The orchestrator: Herdr agent name `orchestrator`, pane ID, workspace and session |
-| `slice`, `worktreeRoot`, `runDir` | Slice branch and worktree; absolute user-owned locations outside the main checkout; `runDir` under `J/runs/`, outside all worktrees |
+| `responsible` | The orchestrator: its Herdr agent name, pane ID, workspace and session |
+| `slice`, `worktreeRoot`, `runDir` | Slice branch and worktree, and the worktree root: omit them to take the Naming *Swarm slice* row and its location; a new contract that names another layout is rejected. `runDir` under `J/runs/`, outside the repository |
 | `skillRoot`, `ponytailPath` | Absolute path of this `swarm/` directory (it holds `swarm.md` and `roles/`); resolved `ponytail` SKILL.md |
 
-The Principal starts as `herdr agent start <prefix>-principal --kind codex --pane <id> -- --model gpt-6.1-sol -c 'model_reasoning_effort="high"' --dangerously-bypass-approvals-and-sandbox`, and the reviewer as `herdr agent start <prefix>-reviewer --kind claude --pane <id> -- --model claude-opus-5-5 --effort high --dangerously-skip-permissions` ([Models](references/models.md)).
+The scripts start both under their Naming agent names and pane titles: the Principal with `--kind codex -- --model gpt-6.1-sol -c 'model_reasoning_effort="high"' --dangerously-bypass-approvals-and-sandbox`, the reviewer with `--kind claude -- --model claude-opus-5-5 --effort high --dangerously-skip-permissions` ([Models](references/models.md)).
 
 ## Supervise and receive
 

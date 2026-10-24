@@ -13,7 +13,7 @@ import sys
 from typing import Any
 
 from swarmcore import (
-    SHA_RE, VERSION, SwarmError, beneath, canonical, coder_names, herdr, init_run, load_json, load_launch, model_args,
+    SHA_RE, VERSION, SwarmError, canonical, coder_names, herdr, init_run, load_json, load_launch, model_args,
     now, principal_name as principal_of, receipt_event, require_beneath, reviewer_name, roster, run,
     send_event, validate_event, validate_new_launch, write_json_mutable,
 )
@@ -195,6 +195,18 @@ def ensure_slice_worktree(launch: dict[str, Any], *, dry_run: bool = False,
                            allow_advanced_adoption=allow_advanced_adoption)
 
 
+def pane_title(launch: dict[str, Any], role: str) -> str:
+    """Pane title of a team member, ``<prefix> · <role>`` (references/naming.md of the skill)."""
+    return f"{launch['prefix']} \u00b7 {role}"
+
+
+def label_slice_workspace(launch: dict[str, Any], workspace_id: str, tab_id: str, principal_pane: str) -> None:
+    """Workspace and tab labelled ``<prefix>``, the Principal's pane titled; idempotent, rerun on every bootstrap."""
+    herdr("workspace", "rename", workspace_id, launch["prefix"])
+    herdr("tab", "rename", tab_id, launch["prefix"])
+    herdr("pane", "rename", principal_pane, pane_title(launch, "principal"))
+
+
 def named_agents() -> dict[str, dict[str, Any]]:
     result = herdr("agent", "list")
     return {a["name"]: a for a in result.get("agents", []) if a.get("name")}
@@ -295,6 +307,7 @@ def bootstrap_responsible(contract_path: pathlib.Path, run_dir: pathlib.Path, *,
         save_bootstrap(root, journal)
         harness, args = model_args(launch["models"]["principal"])
         start_agent(principal_name, harness, pane_id, args)
+    label_slice_workspace(launch, workspace_id, tab_id, pane_id)
     journal["responsible"].update(principalPaneId=pane_id, principalTabId=tab_id,
                                    principalWorkspaceId=workspace_id,
                                    principalGeneration=generation, principalStarted=True)
@@ -543,6 +556,8 @@ def _boot_and_start_children(root: pathlib.Path, launch: dict[str, Any], journal
             started[name] = result
     journal[section]["childrenStarted"] = started
     save_bootstrap(root, journal)
+    if reviewer_name(launch) in layout:
+        herdr("pane", "rename", layout[reviewer_name(launch)]["paneId"], pane_title(launch, "reviewer"))
     for name, result in started.items():
         state["agents"][name]["liveStatus"] = result["status"]
     state["updatedAt"] = now()
@@ -634,6 +649,7 @@ def rotate_principal(run_dir: pathlib.Path, reason: str) -> dict[str, Any]:
     else:
         harness, args = model_args(launch["models"]["principal"])
         agent = start_agent(principal_name, harness, pane_id, args)
+    herdr("pane", "rename", pane_id, pane_title(launch, "principal"))
     boot_path = pathlib.Path(rotation.get("bootEventPath", ""))
     if not boot_path.is_file():
         payload = {
@@ -663,6 +679,41 @@ def rotate_principal(run_dir: pathlib.Path, reason: str) -> dict[str, Any]:
 
 TASK_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,30}$")
 TASK_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$")
+# Other checkouts of the same slice share the <prefix>- namespace under .worktrees/ (references/naming.md).
+RESERVED_TASK_NAMES = {"preparation", "admission"}
+REVIEW_INFIX = "review"
+
+
+def task_worktree_path(launch: dict[str, Any], name: str) -> pathlib.Path:
+    """``<repoPath>/.worktrees/<prefix>-<name>``."""
+    return canonical(launch["worktreeRoot"]) / f"{launch['prefix']}-{name}"
+
+
+def review_name(launch: dict[str, Any], task_id: str, revision: int) -> str:
+    """``<task>-r<revision>``: the task ID lowercased without its ``<sliceId>-`` head; ``slice`` for a slice review."""
+    task, slice_id = task_id.lower(), launch["sliceId"].lower()
+    if task == slice_id:
+        task = "slice"
+    elif task.startswith(f"{slice_id}-"):
+        task = task[len(slice_id) + 1:]
+    return f"{task}-r{revision}"
+
+
+def review_worktree_path(launch: dict[str, Any], name: str) -> pathlib.Path:
+    """``<repoPath>/.worktrees/<prefix>-review-<task>-r<revision>``."""
+    return canonical(launch["worktreeRoot"]) / f"{launch['prefix']}-{REVIEW_INFIX}-{name}"
+
+
+def is_review_checkout(launch: dict[str, Any], path: pathlib.Path) -> bool:
+    return (path.parent == canonical(launch["worktreeRoot"])
+            and path.name.startswith(f"{launch['prefix']}-{REVIEW_INFIX}-"))
+
+
+def is_task_checkout(root: pathlib.Path, path: pathlib.Path) -> bool:
+    """A task worktree this run recorded in ``state.json``; the flat namespace is shared, so the name alone proves nothing."""
+    state_path = root / "state.json"
+    tasks = load_json(state_path).get("tasks", {}) if state_path.is_file() else {}
+    return any(task.get("worktree") == str(path) for task in tasks.values())
 
 
 def _require_principal_pane(state: dict[str, Any], launch: dict[str, Any]) -> None:
@@ -711,6 +762,8 @@ def task_worktree(root: pathlib.Path, launch: dict[str, Any], task_id: str, name
     """
     if not TASK_ID_RE.fullmatch(task_id) or not TASK_NAME_RE.fullmatch(name):
         raise SwarmError("invalid task ID or worktree name")
+    if name in RESERVED_TASK_NAMES or name == REVIEW_INFIX or name.startswith(f"{REVIEW_INFIX}-"):
+        raise SwarmError(f"task worktree name is reserved for another checkout of the slice: {name}")
     if owner not in {principal_of(launch), *coder_names(launch)}:
         raise SwarmError(f"task owner is not an implementer of this run: {owner}")
     if not SHA_RE.fullmatch(base):
@@ -720,13 +773,13 @@ def task_worktree(root: pathlib.Path, launch: dict[str, Any], task_id: str, name
         raise SwarmError("state.json is missing: run bootstrap principal first")
     state = load_json(state_path)
     _require_principal_pane(state, launch)
-    path = canonical(launch["worktreeRoot"]) / launch["prefix"] / name
+    path = task_worktree_path(launch, name)
     task = state["tasks"].setdefault(task_id, {})
     if task.get("worktree") not in {None, str(path)}:
         raise SwarmError(f"task {task_id} already has another worktree")
     own_task = owner == principal_of(launch)
     worktree = ensure_worktree(canonical(launch["repoPath"], exists=True), path,
-                               f"task/{launch['prefix']}/{name}", base, f"{launch['prefix']}-{name}",
+                               f"task/{launch['prefix']}/{name}", base, path.name,
                                allow_advanced_adoption=task.get("worktree") == str(path),
                                open_existing=not own_task)
     task.update(worktree=str(path), branch=worktree["branch"], workspaceId=worktree["workspaceId"], owner=owner)
@@ -774,8 +827,7 @@ def close_worktree(root: pathlib.Path, launch: dict[str, Any], path_value: pathl
     """
     repo = canonical(launch["repoPath"], exists=True)
     path = canonical(path_value)
-    if not beneath(path, canonical(launch["worktreeRoot"]) / launch["prefix"], allow_root=False) \
-            or path == canonical(launch["slice"]["worktree"]):
+    if not (is_review_checkout(launch, path) or is_task_checkout(root, path)):
         raise SwarmError("only this run's task or review checkouts can be closed")
     if path not in git_worktrees(repo):
         raise SwarmError(f"not a registered worktree: {path}")
@@ -807,8 +859,7 @@ def review_worktree(root: pathlib.Path, launch: dict[str, Any], task_id: str, re
     repo = canonical(launch["repoPath"], exists=True)
     require_main_checkout(repo)
     run(["git", "-C", str(repo), "cat-file", "-e", f"{sha}^{{commit}}"])
-    name = f"{task_id.lower()}-r{revision}"
-    path = canonical(launch["worktreeRoot"]) / launch["prefix"] / "reviews" / name
+    path = review_worktree_path(launch, review_name(launch, task_id, revision))
     existing = git_worktrees(repo).get(path)
     if existing is None:
         if path.exists():
@@ -820,15 +871,14 @@ def review_worktree(root: pathlib.Path, launch: dict[str, Any], task_id: str, re
     if run(["git", "-C", str(path), "status", "--porcelain"]).stdout.strip():
         raise SwarmError("review checkout is dirty")
     # The reviewer closes each review workspace after its verdict; close any it left open and idle.
-    reviews = path.parent
     closed = []
     for entry in herdr("worktree", "list", "--cwd", str(repo)).get("worktrees", []):
         other, workspace_id = canonical(entry["path"]), entry.get("open_workspace_id")
-        if workspace_id and other != path and beneath(other, reviews, allow_root=False):
+        if workspace_id and other != path and is_review_checkout(launch, other):
             if close_idle_workspace(workspace_id)["closedWorkspace"]:
                 closed.append(workspace_id)
     return {"action": "adopt" if existing else "create", "path": str(path), "head": sha, "detached": True,
-            **open_worktree(repo, path, f"{launch['prefix']}-{name}"), "closedWorkspaces": closed}
+            **open_worktree(repo, path, path.name), "closedWorkspaces": closed}
 
 
 def remove_worktree(root: pathlib.Path, launch: dict[str, Any], path_value: pathlib.Path,
@@ -840,8 +890,8 @@ def remove_worktree(root: pathlib.Path, launch: dict[str, Any], path_value: path
     """
     repo = canonical(launch["repoPath"], exists=True)
     path = canonical(path_value)
-    if not beneath(path, canonical(launch["worktreeRoot"]) / launch["prefix"], allow_root=False) \
-            and path != canonical(launch["slice"]["worktree"]):
+    if not (path == canonical(launch["slice"]["worktree"]) or is_review_checkout(launch, path)
+            or is_task_checkout(root, path)):
         raise SwarmError("only this run's worktrees can be removed")
     existing = git_worktrees(repo).get(path)
     if existing is None:

@@ -2,6 +2,21 @@
 
 Versions up to 2.4.2 were released as the `implement-with-swarm` skill.
 
+## 2.6.0 — 2026-10-24
+
+Applies the owner-approved naming taxonomy ([Naming](../references/naming.md)): every worktree lives at `<repoPath>/.worktrees/<name>`.
+
+### Changed
+
+- **Layout:** the slice worktree is `<repoPath>/.worktrees/<prefix>` on `slice/<prefix>`, a task worktree `<repoPath>/.worktrees/<prefix>-<task>` on `task/<prefix>/<task>`, and a review checkout `<repoPath>/.worktrees/<prefix>-review-<task>-r<n>`, where `<task>` drops the task ID's `<sliceId>-` head (`slice` for the deep slice review). It was `worktreeRoot/<prefix>/{slice,<task>,reviews/<task ID>-r<n>}` with `worktreeRoot` outside the repository.
+- **Launch contract:** `worktreeRoot` and `slice` may be omitted and default to that layout; a contract whose `worktreeRoot` is not `<repoPath>/.worktrees`, or whose slice worktree is not `<worktreeRoot>/<prefix>`, is rejected. `runDir` must stay outside the repository.
+- **Titles:** bootstrap labels the slice workspace and its tab `<prefix>` and titles the panes `<prefix> · principal` and `<prefix> · reviewer` (`herdr workspace|tab|pane rename`), again on a restart.
+- **Scope:** task names `preparation`, `admission`, `review` and `review-*` are reserved for the slice's other checkouts; `worktree close` and `worktree remove` accept a task worktree only when `state.json` records it.
+
+### Compatibility
+
+- Automation version 2.6.0. Runs launched under 2.5.0 keep their run-pinned runtime and layout.
+
 ## 2.5.0 — 2026-10-24
 
 The swarm moves into `orchestrate-zafir-implementation` as its `swarm/` section; the orchestrator is the responsible agent.

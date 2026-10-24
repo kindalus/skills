@@ -14,7 +14,7 @@ Write `runDir/reports/<principal>/plan.md` from the delivery package: one task p
 
 ## 3. Assign
 
-Per task: create its worktree from the current slice head with `runtime/swarmctl.py worktree task` (its Herdr workspace is closed at once, since you work from the slice workspace, and `workspaceId` is null), copy the printed `worktree`, `branch` and `workspaceId` into one grant ([Execution](../references/execution.md)) and send `TASK_ASSIGN` with `grantPath` and `grantSha256` to yourself.
+Per task: create its worktree from the current slice head with `runtime/swarmctl.py worktree task`, whose `--name` is the task's `<task>` in [Naming](../../references/naming.md#table) (its Herdr workspace is closed at once, since you work from the slice workspace, and `workspaceId` is null), copy the printed `worktree`, `branch` and `workspaceId` into one grant ([Execution](../references/execution.md)) and send `TASK_ASSIGN` with `grantPath` and `grantSha256` to yourself.
 
 ## 4. Your own tasks
 

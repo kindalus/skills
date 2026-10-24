@@ -18,24 +18,16 @@ You are the **orchestrator**: the single coordinator and integrator. Preparers t
 | Swarm (Principal, reviewer) | [Swarm](swarm/swarm.md) and its role cards |
 | Orchestrator integrating | [Integration](integration/integration.md) |
 | Anyone driving Herdr or writing shell | [Operations](references/operations.md) |
+| Anyone creating or titling a worktree, branch, agent, pane, workspace or tab | [Naming](references/naming.md) |
 
 Resolve every path from this skill's directory and pass absolute paths in every brief.
 
 ## Start
 
-1. **Preflight.** Run `scripts/preflight.sh --project <repo>`. It fails closed when the session is not Herdr, `jq` is missing, any of `claude`, `codex`, `pi`, `agy` is missing, the `ponytail`, `graft` or `grilling` skill is missing, or the project uses containers or worktrees without `podman`/`docker` and `git worktree`. On failure, report the missing items and stop: nothing is launched.
-2. **Register.** `herdr agent rename "$HERDR_PANE_ID" orchestrator`, and rename the current tab `Orchestrator`. If another live `orchestrator` exists, stop and ask.
+1. **Preflight.** Run `scripts/preflight.sh --project <repo>`. It fails closed when the session is not Herdr, `jq` is missing, any of `claude`, `codex`, `pi`, `agy` is missing, the `ponytail`, `graft` or `grilling` skill is missing, or the project uses containers or worktrees without `podman`/`docker` and `git worktree`; it also adds the [Naming](references/naming.md#location) exclude for `.worktrees/` when missing. On failure, report the missing items and stop: nothing is launched.
+2. **Register.** Give this pane the orchestrator's agent name, pane title and tab from [Naming](references/naming.md#table) (`herdr agent rename "$HERDR_PANE_ID"`, `herdr pane rename`, `herdr tab rename`). If another live orchestrator exists, stop and ask.
 3. **Job directory.** `J=${XDG_STATE_HOME:-$HOME/.local/state}/orchestrate-zafir-implementation/<repo-key>/`, mode `0700`, outside every worktree. It holds the [decision log](#decision-log), the [owner requests](#owner-requests), the [consultant queue](consultants/consultants.md#queue), `preparers.txt`, briefs, admissions, gate logs and the swarms' `runs/`. Reuse it on resume.
-4. **Environment.** Read `herdr agent list` and create only the missing tabs and agents:
-
-   | Tab | Agents |
-   | --- | --- |
-   | `Orchestrator` | this pane |
-   | `Consultants` | `consultant-claude`, `consultant-codex`, `consultant-agy`, all at reasoning high ([Roster](consultants/consultants.md#roster)) |
-   | `Bugs` | `bugs-1` … `bugs-4`, codex in yolo mode ([Bugs](#bugs)) |
-   | `Preparers` | one dedicated preparer per slice in preparation, opened on demand ([Preparers](#preparers)) |
-
-   Swarms run in their own Herdr workspaces, created by the swarm bootstrap.
+4. **Environment.** Read `herdr agent list` and create only the missing tabs and agents, named and titled per [Naming](references/naming.md#table): the consultants at reasoning high ([Roster](consultants/consultants.md#roster)), the bug executors, codex in yolo mode ([Bugs](#bugs)), and an empty preparers' tab that gets one preparer per slice on demand ([Preparers](#preparers)). Swarms run in their own Herdr workspaces, created by the swarm bootstrap.
 
 Done when preflight passes, the name is registered, `J` exists and every tab holds its live agents.
 
@@ -69,7 +61,7 @@ One file per request, `J/requests/REQUEST-<n>.md`, `<n>` the next free number. I
 
 ### Admission
 
-An approved slice (phase 1 on main, `implementable` on the authoritative register) gets an **admission** before its swarm: a read-only check on a detached worktree of current main. Following Zafir CONCURRENCY *Admission* and PREPARATION *Just-in-time and freshness*, it covers:
+An approved slice (phase 1 on main, `implementable` on the authoritative register) gets an **admission** before its swarm: a read-only check on a detached checkout of current main at its [Naming](references/naming.md#table) path. Following Zafir CONCURRENCY *Admission* and PREPARATION *Just-in-time and freshness*, it covers:
 
 1. the preconditions and consumed contracts, against the real signatures (graft);
 2. freshness: the diff of main since approval, against the impact map and envelope;
@@ -84,15 +76,15 @@ Keep one table of every slice and bug, and show it at each transition:
 
 | Slice | Phase | Work | Agents | Herdr state | Last activity |
 | --- | --- | --- | --- | --- | --- |
-| S430 | 5.2 | grill and decisions | preparer-3, consultant-claude | working | 14:18, answering Q3 |
+| S430 | 5.2 | grill and decisions | s430-preparer, consultant-claude | working | 14:18, answering Q3 |
 
 The Herdr state comes from `herdr agent list`; the last activity is your one-line summary of a bounded `agent read`.
 
 ## Preparers
 
 0. **Eligible.** Before opening one, read the slice's register row (`specifiable` and its reason, `dependsOn`) and the dependencies the project's plan sets for its family or phase. A slice deferred by just-in-time, or whose plan dependency is not yet integrated, gets no preparer; record its trigger in the pipeline. A slice without approved scope goes back to Zafir Steps 1–4 as an owner request, not to a preparer.
-1. **Open.** One new, dedicated preparer per slice: `preparer-<n>`, `<n>` the next free number. Split a pane in the `Preparers` tab and start it there: `herdr agent start preparer-<n> --kind pi --pane <id> -- --model openai-codex/gpt-6.1-sol --thinking high`.
-2. **Brief.** Write `J/briefs/prep-<slice>.md`: slice ID, spec path, main SHA, worktree path and branch `prep/<slice>`, the decisions and owner answers that bind it, and the path of [the preparer card](preparation/preparer.md). Prompt the preparer with the brief's path and sha256. Add `preparer-<n> <slice>` to `J/preparers.txt`.
+1. **Open.** One new, dedicated preparer per slice, named and titled per [Naming](references/naming.md#table). Split a pane in the preparers' tab and start it there: `herdr agent start <name> --kind pi --pane <id> -- --model openai-codex/gpt-6.1-sol --thinking high`, then set its pane title.
+2. **Brief.** Write `J/briefs/prep-<slice>.md`: slice ID, spec path, main SHA, the preparer's worktree path, branch and workspace label from Naming, the decisions and owner answers that bind it, and the path of [the preparer card](preparation/preparer.md). Prompt the preparer with the brief's path and sha256. Add its agent name to `J/preparers.txt`.
 3. **Serve** its consultant requests from the [queue](consultants/consultants.md#queue), and carry its owner questions as owner requests.
 4. **Close** it when 5.4 is approved and phase 1 is delivered: quit its harness, remove it from `preparers.txt`, log it. Its worktree stays until phase 1 is on main.
 
@@ -100,9 +92,9 @@ Just-in-time: a slice that depends on one still in swarm opens its preparer only
 
 ## Bugs
 
-- Executors: `herdr agent start bugs-<n> --kind codex --pane <id> -- --model gpt-6.1-sol -c 'model_reasoning_effort="high"' --dangerously-bypass-approvals-and-sandbox`.
-- Each bug gets an ID (the next free one) and a brief, and follows Zafir SHORT-PATHS *Bug fix workflow* on its own branch and worktree.
-- Its review is independent and from a family other than codex's: a `consultant-claude` or `consultant-agy` grant from the queue.
+- Executors, named per [Naming](references/naming.md#table): `herdr agent start <name> --kind codex --pane <id> -- --model gpt-6.1-sol -c 'model_reasoning_effort="high"' --dangerously-bypass-approvals-and-sandbox`.
+- Each bug gets an ID (the next free one) and a brief, and follows Zafir SHORT-PATHS *Bug fix workflow* on its own branch and worktree; the executor's pane title names the bug ([Naming](references/naming.md#table)).
+- Its review is independent and from a family other than codex's: a Claude or agy consultant grant from the queue.
 - An executor stops before a fix that needs a new decision and brings options; you decide, or send an owner request.
 - A pre-existing defect found in a slice is recorded as a separate bug; the slice preserves the behaviour.
 - The fix joins the next batch.

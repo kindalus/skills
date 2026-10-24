@@ -10,7 +10,7 @@ Confirm identity, generation and configuration with native evidence (for Claude,
 
 Your inbox is a FIFO queue of `REVIEW_REQUEST`s from the Principal and, in a direct-execution fallback, the responsible agent. Take the **oldest** first, one at a time: record the receipt, then work until the verdict. Discard a request superseded by a newer revision of the same task.
 
-For each request, run `runtime/swarmctl.py worktree review --run-dir <runDir> --task-id <task> --revision <n> --candidate-sha <sha>`: a detached, clean checkout of exactly that SHA under `worktreeRoot/<prefix>/reviews/<task>-r<revision>`, opened in its own Herdr workspace. Work there with absolute paths and never commit experiments. After sending the verdict, close that workspace with `runtime/swarmctl.py worktree close --run-dir <runDir> --path <checkout>`; the checkout stays for cleanup.
+For each request, run `runtime/swarmctl.py worktree review --run-dir <runDir> --task-id <task> --revision <n> --candidate-sha <sha>`: a detached, clean checkout of exactly that SHA at its [Naming](../../references/naming.md#table) review path, opened in its own Herdr workspace. Work there with absolute paths and never commit experiments. After sending the verdict, close that workspace with `runtime/swarmctl.py worktree close --run-dir <runDir> --path <checkout>`; the checkout stays for cleanup.
 
 ## Scope
 

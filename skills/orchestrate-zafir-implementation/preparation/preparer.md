@@ -4,8 +4,8 @@ You are a **preparer**: you take exactly one slice through Zafir 5.1–5.4 and s
 
 ## Lifecycle
 
-- One new, dedicated preparer per slice, opened by the orchestrator in the `Preparers` tab.
-- All work happens in the slice's own worktree, created through Herdr and used by absolute path: `herdr worktree create --cwd <main checkout> --branch prep/<slice> --base <main SHA> --path <worktree> --label prep-<slice> --no-focus`, then close the workspace it opened (`herdr workspace close <id>`). Your pane stays in the `Preparers` tab; run Git as `git -C <worktree>`.
+- One new, dedicated preparer per slice, opened by the orchestrator in the preparers' tab. Your agent name, pane title, worktree path, branch and workspace label are your [Naming](../references/naming.md#table) row, copied into your brief.
+- All work happens in the slice's own worktree, created through Herdr and used by absolute path: `herdr worktree create --cwd <main checkout> --branch <branch> --base <main SHA> --path <worktree> --label "<workspace label>" --no-focus`, then close the workspace it opened (`herdr workspace close <id>`). Your pane stays in the preparers' tab; run Git as `git -C <worktree>`.
 - The orchestrator closes you when 5.4 is approved and phase 1 is delivered.
 
 ## Limit
@@ -66,8 +66,8 @@ Read and write under Zafir *Tool discipline*: JSON by `jq` or Python by ID, hash
 
 ## Delivery
 
-1. **Commit phase 1** on `prep/<slice>`: the files Zafir PREPARATION's phase-1 marker lists, with the trailers `Slice: <id>` and `Phase: 1`, excluding work you did not make.
-2. **Merge current main** into `prep/<slice>` (never rebase), resolve the register and shared records by ID, and run the project's cheap validators.
+1. **Commit phase 1** on your branch: the files Zafir PREPARATION's phase-1 marker lists, with the trailers `Slice: <id>` and `Phase: 1`, excluding work you did not make.
+2. **Merge current main** into your branch (never rebase), resolve the register and shared records by ID, and run the project's cheap validators.
 3. **Hand off** to the orchestrator in one short message: slice, branch, phase-1 SHA, the spec, deck and package paths with their sha256, the open blockers, and "Preparation 5.1–5.4 done; 5.5 not started".
 
 Done when the orchestrator acknowledges the hand-off. It integrates phase 1 in a documentation batch ([Integration](../integration/integration.md#documentation-batches)) and closes you.

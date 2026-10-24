@@ -20,7 +20,9 @@ import tempfile
 import uuid
 from typing import Any, Iterable
 
-VERSION = "2.5.0"
+VERSION = "2.6.0"
+# Every worktree lives at <repoPath>/.worktrees/<name> (references/naming.md of the skill).
+WORKTREES_DIR = ".worktrees"
 AGENT_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 PREFIX_RE = re.compile(r"^[a-z][a-z0-9_-]{0,20}$")
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -307,10 +309,28 @@ def require_solo_team(value: Any) -> None:
                          "reviewer (owner decision 2026-10-14)")
 
 
+def with_layout_defaults(value: Any) -> Any:
+    """Fill the worktree layout a new contract may omit: ``worktreeRoot`` is ``<repoPath>/.worktrees``,
+    ``slice.worktree`` is ``<worktreeRoot>/<prefix>`` and ``slice.branch`` is ``slice/<prefix>``.
+
+    Returns a copy; anything malformed is left for validate_launch to report.
+    """
+    if not isinstance(value, dict) or not isinstance(value.get("repoPath"), str) \
+            or not isinstance(value.get("prefix"), str):
+        return value
+    value = dict(value)
+    value.setdefault("worktreeRoot", str(pathlib.Path(value["repoPath"]) / WORKTREES_DIR))
+    slice_value = value.setdefault("slice", {})
+    if isinstance(slice_value, dict) and isinstance(value["worktreeRoot"], str):
+        value["slice"] = {"branch": f"slice/{value['prefix']}",
+                          "worktree": str(pathlib.Path(value["worktreeRoot"]) / value["prefix"]), **slice_value}
+    return value
+
+
 def validate_new_launch(value: Any, expected_run_dir: pathlib.Path | None = None) -> dict[str, Any]:
     """validate_launch for a contract supplied by the caller rather than reloaded from a run."""
     require_solo_team(value)
-    return validate_launch(value, expected_run_dir)
+    return validate_launch(with_layout_defaults(value), expected_run_dir)
 
 
 def validate_launch(value: Any, expected_run_dir: pathlib.Path | None = None) -> dict[str, Any]:
@@ -362,11 +382,14 @@ def validate_launch(value: Any, expected_run_dir: pathlib.Path | None = None) ->
     slice_worktree = canonical(slice_value["worktree"])
     if expected_run_dir is not None and run_dir != canonical(expected_run_dir):
         raise SwarmError("contract runDir differs from requested run directory")
-    pairs = ((run_dir, repo), (run_dir, worktree_root), (repo, worktree_root))
-    if any(beneath(left, right) or beneath(right, left) for left, right in pairs):
-        raise SwarmError("runDir, repository, and worktreeRoot must be disjoint")
-    if not beneath(slice_worktree, worktree_root, allow_root=False):
-        raise SwarmError("slice worktree must be below worktreeRoot")
+    if beneath(run_dir, repo) or beneath(repo, run_dir):
+        raise SwarmError("runDir and the repository must be disjoint")
+    if worktree_root != repo / WORKTREES_DIR:
+        raise SwarmError(f"worktreeRoot must be <repoPath>/{WORKTREES_DIR} ({repo / WORKTREES_DIR}), "
+                         f"not {worktree_root}; omit it to take the default")
+    if slice_worktree != worktree_root / value["prefix"]:
+        raise SwarmError(f"slice.worktree must be <repoPath>/{WORKTREES_DIR}/<prefix> "
+                         f"({worktree_root / value['prefix']}), not {slice_worktree}; omit it to take the default")
     spec_path = canonical(value["specPath"], exists=True)
     skill_root = canonical(value["skillRoot"], exists=True)
     ponytail_path = canonical(value["ponytailPath"], exists=True)
