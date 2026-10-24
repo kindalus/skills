@@ -74,6 +74,17 @@ One integrator runs one integration at a time, in order of readiness. An integra
 - Step 7 is a plain `git merge --no-ff`.
 - The last whole gate on the frozen head ([When it runs](SKILL.md#green-means-the-whole-gate)) is the combined-tree evidence.
 
+**Routing a ready slice.** A slice merges the current integration branch before its own whole gate. When it is ready (phase 3 committed), compute its merge with the current integration branch without a worktree (`git merge-tree --write-tree`) and compare the result with the tree of its last green whole gate:
+
+| Combined tree | Route | Gate |
+| --- | --- | --- |
+| identical | integrate now, alone | none: cite the slice's green whole gate |
+| differs only in documentation | integrate now, alone | cheap validators |
+| differs in code, merges cleanly | join the next [batch](#batches) with every element ready then | one whole gate for the batch |
+| conflicts | back to the slice branch: queue steps 2–5, then its own whole gate again | as its new route |
+
+"Documentation" is the project's documentation tree; tests, migrations, scripts, build files and fixtures are code.
+
 ### Batches
 
 A batch is the normal way to integrate several ready elements: slices with phase 3 committed, bug fixes, R-lane work. It saves gates, never checks.
