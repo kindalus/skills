@@ -112,7 +112,7 @@ Inside a red → green step, green means one test passes. Everywhere else, green
 
 **When it runs:**
 
-- before the slice's final review (5.6);
+- before the slice's final review (5.6), or, under a merge queue, after it, on the slice merged with the current integration branch ([CONCURRENCY](CONCURRENCY.md) *Merge queue*);
 - after any later change to code, tests, migrations or build inputs;
 - on the combined tree at every integration.
 

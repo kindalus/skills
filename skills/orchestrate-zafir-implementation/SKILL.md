@@ -65,7 +65,7 @@ One file per request, `J/requests/REQUEST-<n>.md`, `<n>` the next free number. I
 
 - **No cap** on slices in preparation or in swarm. This is the owner's instruction over Zafir CONCURRENCY *Cap* (Zafir precedence rule 1); record it once in the project's concurrency decision. Only behaviour dependencies and envelope collisions limit entry, and you manage minimal collisions yourself (order, a shared owner, a serial pair).
 - Launch a swarm as soon as its slice is implementable and admitted ([Swarm launch](swarm/swarm.md#launch)).
-- Integrate each slice as soon as it is `SLICE_READY`; slices ready at that moment join the same batch ([Integration](integration/integration.md)).
+- Integrate through the **merge queue**: a slice's `LEASE_REQUEST`, after its deep review, gets main merged in, the whole gate, and integration at once on green; its phase-3 `SLICE_READY` follows as a documentation batch ([Integration](integration/integration.md)).
 
 ### Admission
 
