@@ -24,6 +24,7 @@ Because the excluded `.worktrees/` holds every live checkout, clean the main che
 | Bug executors | `.worktrees/bug-<id>` | `bug/<id>` | `bugs-1` … `bugs-4` | `bugs-<n> · <id>` | tab `Bugs` |
 | Batch | `.worktrees/batch-<n>` | `integ/batch-<n>` | — | — | workspace `batch-<n>`, closed at the end |
 | Admission | `.worktrees/<slice>-admission`, detached | — | — | — | — |
+| Setup window | `.worktrees/<slice>-setup`, detached at the preparation's base; untracked manifested sources only, removed after the window | — | — | — | — |
 
 ## Applying it
 
