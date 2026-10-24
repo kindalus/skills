@@ -18,7 +18,7 @@ Because the excluded `.worktrees/` holds every live checkout, clean the main che
 | Principal | the slice worktree | — | `<slice>-principal` | `<slice> · principal` | tab `<slice>` |
 | Reviewer | review checkouts `.worktrees/<slice>-review-<task>-r<n>` | — (detached) | `<slice>-reviewer` | `<slice> · reviewer` | tab `<slice>` |
 | Swarm task | `.worktrees/<slice>-<task>` | `task/<slice>/<task>` | — | — | — |
-| Preparer | `.worktrees/<slice>-preparation` | `prep/<slice>` | `<slice>-preparer` | `<slice> · preparer` | its worktree's workspace is labelled `<slice> · preparation` and closed right after creation; the pane stays in tab `Preparers` |
+| Preparer | `.worktrees/<slice>-preparation` | `prep/<slice>` | `<slice>-preparer` | `<slice> · preparer` | workspace label and tab `<slice> · preparation`, open while the preparer works and holding its pane, so the owner can follow it |
 | Orchestrator | — | — | `orchestrator` | `orchestrator` | tab `Orchestrator` |
 | Consultants | — | — | `consultant-claude`, `consultant-codex`, `consultant-agy` | `consultant-<cli> · free` or `consultant-<cli> · <slice>` | tab `Consultants` |
 | Bug executors | `.worktrees/bug-<id>` | `bug/<id>` | `bugs-1` … `bugs-4` | `bugs-<n> · <id>` | tab `Bugs` |

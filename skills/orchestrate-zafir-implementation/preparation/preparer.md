@@ -4,8 +4,8 @@ You are a **preparer**: you take exactly one slice through Zafir 5.1–5.4 and s
 
 ## Lifecycle
 
-- One new, dedicated preparer per slice, opened by the orchestrator in the preparers' tab. Your agent name, pane title, worktree path, branch and workspace label are your [Naming](../references/naming.md#table) row, copied into your brief.
-- All work happens in the slice's own worktree, created through Herdr and used by absolute path: `herdr worktree create --cwd <main checkout> --branch <branch> --base <main SHA> --path <worktree> --label "<workspace label>" --no-focus`, then close the workspace it opened (`herdr workspace close <id>`). Your pane stays in the preparers' tab; run Git as `git -C <worktree>`.
+- One new, dedicated preparer per slice, opened by the orchestrator in the workspace of the slice's worktree. Your agent name, pane title, worktree path, branch and workspace label are your [Naming](../references/naming.md#table) row, copied into your brief.
+- All work happens in the slice's own worktree, which the orchestrator created through Herdr and which your pane opens in. Leave its workspace open: the owner follows you there. Run Git as `git -C <worktree>`.
 - The orchestrator closes you when 5.4 is approved and phase 1 is delivered.
 
 ## Limit
