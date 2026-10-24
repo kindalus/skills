@@ -10,7 +10,7 @@
     {
       "title": "Agent Workflows",
       "description": "Skills for structured development processes and supervised multi-agent implementation.",
-      "skills": ["zafir-development-process", "implement-with-swarm"]
+      "skills": ["zafir-development-process", "orchestrate-zafir-implementation"]
     },
     {
       "title": "ERP Integrations",
