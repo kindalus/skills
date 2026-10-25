@@ -101,7 +101,7 @@ The space's state, its tasks and its members change only through accepted events
 | `TASK_INTEGRATED` | task `integrated` |
 | `SWARM_READY`, `LEASE_REQUEST`, `SLICE_READY` | space `running`, `lease-requested`, `ready` |
 | `SLICE_ACCEPTED` | space `accepted`, and the space closes |
-| `CANCEL` (to the Principal) | space `cancelled`, and the space closes |
+| `CANCEL` (to the Principal) | space `cancelled`; it stays open only for the Principal's `CANCEL` to each booted child and closes when each has a receipt (`correio space close --space <prefix>` closes it at once, for a child that is gone) |
 | `AGENT_READY`; `BLOCKED` and `RESUME` | member ready; member blocked, unblocked |
 | `MODEL_REPLACE` | the role's member configuration gets the next revision, with history and the reviewer fallback marker |
 | `bootstrap restart-principal` | the Principal's member generation + 1 |

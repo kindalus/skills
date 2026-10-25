@@ -8,7 +8,9 @@ publish the next version instead. Every check raises ValueError with the reason.
 Differences from 2.7.0, all additive: the payload is the envelope's one-level ``fields`` map (rich detail
 goes in the Markdown body or an attachment); ``TASK_INTEGRATED`` may also go from the Principal to itself,
 because without coders it is the only way to mark a task integrated; a reject receipt is always allowed,
-so an event whose grant changed can be refused instead of waiting forever.
+so an event whose grant changed can be refused instead of waiting forever. A CANCEL accepted by the Principal
+makes the space ``cancelled`` but keeps it open, for the Principal's CANCEL to each booted child only, until
+each child has receipted it; the 2.7.0 state file had no closing step to order.
 """
 from __future__ import annotations
 
@@ -282,6 +284,11 @@ def validate_send(space: dict[str, Any], members: dict[str, dict[str, Any]], env
             raise ValueError("event sender or recipient is not a member of this space")
         if members[sender]["generation"] != generation:
             raise ValueError("event sender generation is stale")
+    if (db.space_state(space["id"]).get("state") == "cancelled"
+            and not (kind == "CANCEL" and sender == principal_name(launch)
+                     and parent_of(recipient, launch) == sender)):
+        raise ValueError(f"space {space['id']} is cancelled: only the Principal's CANCEL to its children "
+                         "goes out until each child has receipted it")
     if kind == "TASK_ASSIGN":
         _check_grant(space, fields)
     if kind == "MODEL_REPLACE":
@@ -367,7 +374,10 @@ def project(space: dict[str, Any], message: dict[str, Any], receipt: dict[str, A
         state.update(state="accepted", acceptedSha=fields["candidateSha"])
         db.set_space_state(sid, state, by)
     if kind == "CANCEL" and message["to_agent"] == principal_name(launch) and not terminal:
-        state["state"] = "cancelled"
+        # The space stays open until the Principal's CANCEL to each booted child (one with a pane) is receipted.
+        children = sorted(name for name, member in db.members(sid).items()
+                          if parent_of(name, launch) == principal_name(launch) and member.get("pane_id"))
+        state.update(state="cancelled", cancel={"event": by, "sentAt": message["sent_at"], "children": children})
         db.set_space_state(sid, state, by)
     if kind == "AGENT_READY":
         db.update_member(sid, message["from_agent"], ready=1)
@@ -416,5 +426,20 @@ def prompt(message: dict[str, Any], queued: int, info_digest: int, *, cli: str) 
             "The courier grants no scope, verdict, permission, or model replacement.")
 
 
-def close_condition(space_state: dict[str, Any]) -> bool:
-    return space_state.get("state") in TERMINAL
+def close_condition(space_state: dict[str, Any], space: dict[str, Any] | None = None, db: Any = None) -> bool:
+    """Accepted closes at once; cancelled once each child named at the cancel has a receipt for a CANCEL
+    the Principal sent it since (``correio space close`` closes it at once)."""
+    if space_state.get("state") == "accepted":
+        return True
+    if space_state.get("state") != "cancelled":
+        return False
+    cancel = space_state.get("cancel")
+    if space is None or db is None or not isinstance(cancel, dict):
+        return True
+    principal = principal_name(space["contract"])
+    for child in cancel.get("children", []):
+        sent = [m for m in db.find_messages(space["id"], type="CANCEL", from_agent=principal, to_agent=child)
+                if m["sent_at"] >= str(cancel.get("sentAt", ""))]
+        if not any(db.receipt(m["id"]) for m in sent):
+            return False
+    return True

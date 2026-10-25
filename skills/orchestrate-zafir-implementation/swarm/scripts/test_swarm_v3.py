@@ -425,6 +425,31 @@ class SwarmV3Test(unittest.TestCase):
         self.assertEqual(space["state"], "cancelled")
         self.assertIsNotNone(space["closed_at"])
 
+    def test_cancel_stays_open_until_the_principal_has_cancelled_its_children(self) -> None:
+        import importlib
+        daemon = importlib.import_module(library.__package__ + ".daemon")
+        root, launch = self.init()
+        library.update_member(self.store(), "t123", "t123-reviewer", pane_id="p-reviewer")  # a booted child
+        review = self.ev(root, launch, "t123-principal", "t123-reviewer", "REVIEW_REQUEST", {},
+                         {"taskId": "T01", "assignmentId": "a1", "revision": 1, "candidateSha": "a" * 40})
+        cancel = self.ev(root, launch, "orchestrator", "t123-principal", "CANCEL", {"reason": "owner"})
+        self.receipt(root, launch, cancel, "t123-principal", True, "cancelling the team")  # receipt before acting
+        space = self.store().space("t123")
+        self.assertEqual((space["state"], space["closed_at"]), ("cancelled", None))
+        self.assertEqual(self.space_state()["cancel"]["children"], ["t123-reviewer"])
+        with self.assertRaisesRegex(swarmctl.SwarmError, "cancelled: only the Principal's CANCEL"):
+            self.ev(root, launch, "t123-principal", "orchestrator", "BLOCKED", {"reason": "x"})
+        child = self.ev(root, launch, "t123-principal", "t123-reviewer", "CANCEL", {"reason": "owner"})
+        store = self.store()
+        queued = [m["id"] for m in daemon.Courier(store, daemon.Herdr("true")).pending_wake()]
+        self.assertEqual(queued, [review, child])  # queued mail still reaches the child
+        self.receipt(root, launch, review, "t123-reviewer", False, "swarm cancelled")
+        self.assertIsNone(self.store().space("t123")["closed_at"])
+        self.receipt(root, launch, child, "t123-reviewer", True, "stopping")
+        space = self.store().space("t123")
+        self.assertEqual(space["state"], "cancelled")
+        self.assertIsNotNone(space["closed_at"])
+
     def test_a_late_receipt_never_reopens_a_terminal_space(self) -> None:
         root, launch = self.init()
         ready = self.ev(root, launch, "t123-principal", "orchestrator", "SWARM_READY")

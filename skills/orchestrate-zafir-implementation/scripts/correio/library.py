@@ -243,7 +243,7 @@ def store_message(store: Store, space: dict[str, Any], data: bytes, parsed: dict
 
 
 def _apply_close(store: Store, space: dict[str, Any], module: Any) -> None:
-    if module.close_condition(store.space_state(space["id"])):
+    if module.close_condition(store.space_state(space["id"]), space, store):
         store.close_space(space["id"])
 
 

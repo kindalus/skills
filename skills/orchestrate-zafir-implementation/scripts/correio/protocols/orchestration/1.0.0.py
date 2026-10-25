@@ -131,5 +131,5 @@ def prompt(message: dict[str, Any], queued: int, info_digest: int, *, cli: str) 
             "nunca por herdr agent prompt.")
 
 
-def close_condition(space_state: dict[str, Any]) -> bool:
+def close_condition(space_state: dict[str, Any], space: dict[str, Any] | None = None, db: Any = None) -> bool:
     return False
