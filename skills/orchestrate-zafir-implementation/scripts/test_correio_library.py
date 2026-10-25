@@ -369,7 +369,7 @@ class CliTest(CorreioCase):
         refused = self.cli("send", "--type", "PEDIDO", "--from", "orquestrador", "--to", "porta-voz",
                            "--subject", "x", check=False)
         self.assertEqual(refused.returncode, 2)
-        self.assertIn("--thread is required", refused.stderr)
+        self.assertIn("send needs --thread", refused.stderr)
         self.assertIn("orq", self.cli("open").stdout)
         job = json.loads(self.cli("jobs", "add", "--kind", "gate", "--who", "s1", "--", "bash", "x.sh", "a b").stdout)
         self.assertEqual(job["cmd"], "bash x.sh a b")

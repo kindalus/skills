@@ -65,6 +65,8 @@ Gates, batches and windows queue in the `jobs` table: `correio jobs add --kind g
 
 Evidence stays in files; messages cite it by path and sha256. When a slice closes, export its space into the slice's evidence: `correio export --space <space> --out <dir>` writes one `.md` per message (its exact envelope bytes), `messages.jsonl`, `space.json` and `SHA256SUMS`.
 
+**Cutover from v1:** an imported v1 message keeps its v1 id in `fields.legacyId`, and `receipt --agent <you> --id <v1 id>` and `show --agent <you> --id <v1 id>` accept it. The v1 form of `send` (no `--thread`, structure in `--payload-file`) works only inside the window `correio compat v1 --hours <n>` opens (the thread is inferred from the slice and request in the text, with a warning; `--off` closes it); outside it, it fails with the v2 form and sends nothing.
+
 **Rollback:** the v1 file mailbox still runs as `correio.py legacy <send|receipt|pending|show|daemon>`.
 
 ## Owner questions

@@ -210,6 +210,55 @@ def verify_pane(members: dict[str, dict[str, Any]], agent: str, space_id: str = 
                            "agents send and receipt only as themselves")
 
 
+# -- the v1 transition ----------------------------------------------------------------------------------------------
+SLICE_IN_TEXT = re.compile(r"\b[Ss](\d{3,4})\b")
+REQUEST_IN_TEXT = re.compile(r"\b(REQUEST-\d+|TESTE-\d+)\b")
+COMPAT_V1 = "v1_compat_until"
+
+
+def infer_thread(subject: Any, body: Any, payload: dict[str, Any] | None = None) -> str:
+    """The thread of a v1 message: its slice (S606) or geral, plus /<request> when it names one."""
+    text = f"{subject or ''} {body or ''}"
+    slice_match = SLICE_IN_TEXT.search(text)
+    request = (payload or {}).get("request")
+    if not request and REQUEST_IN_TEXT.search(text):
+        request = REQUEST_IN_TEXT.search(text).group(1)
+    thread = f"S{slice_match.group(1)}" if slice_match else "geral"
+    if request and re.fullmatch(r"[A-Za-z0-9._-]{1,64}", str(request)):
+        thread = f"{thread}/{request}"
+    return thread
+
+
+def compat_v1(store: Store) -> dict[str, Any]:
+    """The cutover window in which v1 ``send`` (no --thread, --payload-file) still works."""
+    row = store.one("SELECT value FROM meta WHERE key=?", (COMPAT_V1,))
+    until = row[0] if row else None
+    end = parse_iso(until) if until else None
+    return {"until": until, "active": bool(end and end > store.clock.epoch())}
+
+
+def set_compat_v1(store: Store, *, until: str | None) -> dict[str, Any]:
+    with store.tx():
+        if until is None:
+            store.x("DELETE FROM meta WHERE key=?", (COMPAT_V1,))
+        else:
+            if parse_iso(until) is None:
+                raise CorreioError(f"not an ISO time: {until!r}")
+            store.x("INSERT OR REPLACE INTO meta VALUES (?, ?)", (COMPAT_V1, until))
+    return compat_v1(store)
+
+
+def resolve_message(store: Store, ref: str, agent: str | None = None) -> str:
+    """A message id; an imported v1 id (``fields.legacyId``) of a message to ``agent`` also names it."""
+    if store.message(ref) is not None:
+        return ref
+    rows = store.q("SELECT id FROM messages WHERE json_extract(fields, '$.legacyId')=?"
+                   + (" AND to_agent=?" if agent else ""), (ref, agent) if agent else (ref,))
+    if len(rows) == 1:
+        return rows[0]["id"]
+    raise CorreioError(f"no message {ref}" + (f" for {agent}" if agent else ""))
+
+
 # -- send and receipt ------------------------------------------------------------------------------------------------
 def attachment(path: os.PathLike[str] | str) -> dict[str, Any]:
     resolved = pathlib.Path(path).expanduser().resolve()
@@ -330,9 +379,8 @@ def receipt(store: Store, *, message_id: str, agent: str, disposition: str, acce
     if len(disposition) > MAX_DISPOSITION:
         raise CorreioError(f"receipt disposition exceeds {MAX_DISPOSITION} characters")
     with store.tx():
+        message_id = resolve_message(store, message_id, agent)
         message = store.message(message_id)
-        if message is None:
-            raise CorreioError(f"no message {message_id}")
         sp = _space(store, message["space_id"])
         module = protocol_of(sp)
         if message["to_agent"] != agent:
@@ -416,10 +464,9 @@ def inbox(store: Store, *, agent: str | None = None, space: str | None = None,
     return {"agent": agent, "count": len(pending), "pending": pending, "info": info, "invalid": invalid}
 
 
-def show(store: Store, message_id: str) -> dict[str, Any]:
+def show(store: Store, message_id: str, agent: str | None = None) -> dict[str, Any]:
+    message_id = resolve_message(store, message_id, agent)
     message = store.message(message_id)
-    if message is None:
-        raise CorreioError(f"no message {message_id}")
     attachments = []
     for row in store.q("SELECT * FROM attachments WHERE message_id=? ORDER BY path", (message_id,)):
         path = pathlib.Path(row["path"])

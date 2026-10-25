@@ -13,8 +13,6 @@ from . import library
 from .store import CorreioError, Store
 
 V1_NAMESPACE = uuid.UUID("6f1b2c1e-4d0a-4a53-9d59-0f6c2f0f8a11")
-SLICE_IN_TEXT = re.compile(r"\b[Ss](\d{3,4})\b")
-REQUEST_IN_TEXT = re.compile(r"\b(REQUEST-\d+|TESTE-\d+)\b")
 ROLE_BY_NAME = ((re.compile(r"^(orquestrador|orchestrator)$"), "orchestrator"),
                 (re.compile(r"^porta-voz$"), "spokesperson"),
                 (re.compile(r"(preparer|preparador)"), "preparer"),
@@ -84,14 +82,8 @@ def import_files(store: Store, root: pathlib.Path | str, *, space: str | None = 
             try:
                 raw = message_path.read_bytes()
                 v1 = json.loads(raw)
-                text = f"{v1.get('subject', '')} {v1.get('body', '')}"
-                slice_match = SLICE_IN_TEXT.search(text)
                 payload = v1.get("payload") if isinstance(v1.get("payload"), dict) else {}
-                request = payload.get("request") or (REQUEST_IN_TEXT.search(text).group(1)
-                                                     if REQUEST_IN_TEXT.search(text) else None)
-                thread = f"S{slice_match.group(1)}" if slice_match else "geral"
-                if request and re.fullmatch(r"[A-Za-z0-9._-]{1,64}", str(request)):
-                    thread = f"{thread}/{request}"
+                thread = library.infer_thread(v1.get("subject"), v1.get("body"), payload)
                 fields, _structured = _scalar_split(payload)
                 fields.update(legacyId=str(v1["id"]), legacySha256=env.sha256(raw))
                 attachments = []

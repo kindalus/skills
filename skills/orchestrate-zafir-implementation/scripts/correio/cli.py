@@ -191,10 +191,34 @@ def cmd_send(args: argparse.Namespace, store: Store) -> Any:
         if value is not None:
             fields[key] = value
     space = library.resolve_space(store, args.space)
-    return library.send(store, space=space, sender=args.sender, to=args.to, type=args.type, thread=args.thread,
-                        subject=args.subject, body=body, fields=fields, attachments=args.attach,
-                        reply_to=args.reply_to, generation=args.generation, message_id=args.id,
-                        self_receipt=args.self_receipt)
+    thread, compat = args.thread, None
+    sp = store.space(space)
+    if (thread is None or args.payload_file) and sp and sp["kind"] == "orchestration":
+        # The v1 form: no --thread, and structure in --payload-file. It works only inside the cutover window.
+        if not library.compat_v1(store)["active"]:
+            raise CorreioError(
+                "correio v2: send needs --thread (the slice or the request: S606, S606/REQUEST-15 or geral) and "
+                "takes fields with --field/--field-file, not --payload-file; the v1 form ended at the cutover, so "
+                "nothing was sent. Send again in the v2 form (references/operations.md, Mail).")
+        payload: dict[str, Any] = {}
+        if args.payload_file:
+            payload = json.loads(pathlib.Path(args.payload_file).read_text(encoding="utf-8"))
+            if not isinstance(payload, dict):
+                raise CorreioError("--payload-file must hold a JSON object; nothing was sent")
+            scalars, structured = importers._scalar_split(payload)
+            fields = {**scalars, **fields}
+            if structured:
+                body += "\n```json\n" + json.dumps(payload, indent=1, sort_keys=True, ensure_ascii=False) + "\n```\n"
+        thread = thread or library.infer_thread(args.subject, body, payload)
+        compat = "v1"
+        print(json.dumps({"warning": f"v1 compatibility: thread {thread}; from now on send with --thread "
+                                     "and --field (references/operations.md, Mail)"}, ensure_ascii=False),
+              file=sys.stderr)
+    result = library.send(store, space=space, sender=args.sender, to=args.to, type=args.type, thread=thread,
+                          subject=args.subject, body=body, fields=fields, attachments=args.attach,
+                          reply_to=args.reply_to, generation=args.generation, message_id=args.id,
+                          self_receipt=args.self_receipt)
+    return {**result, "compat": compat} if compat else result
 
 
 def cmd_receipt(args: argparse.Namespace, store: Store) -> Any:
@@ -226,7 +250,7 @@ def cmd_show(args: argparse.Namespace, store: Store) -> Any:
     message_id = args.message_id or args.id
     if not message_id:
         raise CorreioError("show needs a message id")
-    result = library.show(store, message_id)
+    result = library.show(store, message_id, args.agent)
     if args.json:
         return result
     if args.raw:
@@ -344,6 +368,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--candidate-sha")
     p.add_argument("--id", help=argparse.SUPPRESS)
     p.add_argument("--self-receipt", metavar="DISPOSITION", help="receipt a message to yourself in the same step")
+    p.add_argument("--payload-file", help=argparse.SUPPRESS)  # v1 form, only inside the compatibility window
 
     p = sub.add_parser("receipt")
     p.add_argument("--id")
@@ -431,6 +456,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-backup", action="store_true")
     p.add_argument("--legacy-refresh", type=float, default=300.0)
     p.add_argument("--once", action="store_true")
+    p = sub.add_parser("compat", help="the cutover window in which v1 send still works")
+    p.add_argument("which", choices=["v1"])
+    group = p.add_mutually_exclusive_group()
+    group.add_argument("--hours", type=float)
+    group.add_argument("--until")
+    group.add_argument("--off", action="store_true")
     p = sub.add_parser("watchdog", help="restart the courier when its heartbeat is stale")
     p.add_argument("--max-age", type=float, default=120.0)
     p.add_argument("--unit")
@@ -474,6 +505,14 @@ def main(argv: list[str] | None = None) -> int:
             result = result if args.json else text_overview(result)
         elif args.command == "search":
             result = library.search(store, args.text, space=args.space, limit=args.limit)
+        elif args.command == "compat":
+            if args.off:
+                result = library.set_compat_v1(store, until=None)
+            elif args.hours is not None or args.until:
+                until = args.until or store.clock.iso(store.clock.epoch() + args.hours * 3600)
+                result = library.set_compat_v1(store, until=until)
+            else:
+                result = library.compat_v1(store)
         elif args.command == "export":
             result = library.export_space(store, args.space, args.out)
         else:
