@@ -68,6 +68,22 @@ class V1ImportTest(CorreioCase):
         pending = library.inbox(self.store, agent="orquestrador")
         self.assertEqual(pending["count"], 3)  # unreceipted v1 mail stays pending, so the courier carries it over
 
+    def test_a_changed_attachment_warns_and_later_receipts_still_import(self) -> None:
+        library.create_space(self.store, space_id="orq", kind="orchestration", protocol="orchestration",
+                             version="1.0.0")
+        root = self.mailbox()
+        self.assertEqual(importers.import_files(self.store, root)["errors"], [])
+        (self.temp / "brief.md").write_text("brief alterado, maior\n")  # the v1 JSON stays as it was
+        receipt = root / "receipts" / "orquestrador" / "20261025T130000000000Z-aaaaaaaa.json"
+        receipt.parent.mkdir(parents=True, exist_ok=True)
+        receipt.write_text(json.dumps({"id": "20261025T130000000000Z-aaaaaaaa", "agent": "orquestrador",
+                                       "disposition": "lido", "receiptedAt": "2026-10-25T13:05:00Z"}))
+        again = importers.import_files(self.store, root)
+        self.assertEqual((again["errors"], again["receipts"], again["messages"]), ([], 1, 0))
+        self.assertEqual([w["path"] for w in again["warnings"]], [str(self.temp / "brief.md")])
+        message = library.resolve_message(self.store, "20261025T130000000000Z-aaaaaaaa", "orquestrador")
+        self.assertEqual(self.store.receipt(message)["disposition"], "lido")
+
     @unittest.skipUnless(os.environ.get("CORREIO_TEST_V1_COPY"), "set CORREIO_TEST_V1_COPY to a copy of correio/")
     def test_a_copy_of_the_live_v1_mailbox_imports_cleanly(self) -> None:
         library.create_space(self.store, space_id="orq", kind="orchestration", protocol="orchestration",

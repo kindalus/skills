@@ -487,12 +487,14 @@ class Courier:
         imported = state.setdefault("imported", {"messages": 0, "receipts": 0, "jobs": 0})
         new = 0
         errors: list[Any] = []
+        warnings: list[Any] = []
         if self.opts.sync_v1_root and pathlib.Path(self.opts.sync_v1_root).is_dir():
             counts = importers.import_files(self.store, self.opts.sync_v1_root, space=self.opts.space)
             new += counts["messages"] + counts["receipts"]
             imported["messages"] += counts["messages"]
             imported["receipts"] += counts["receipts"]
             errors += counts["errors"]
+            warnings += counts["warnings"]
         if self.opts.sync_v1_jobs and pathlib.Path(self.opts.sync_v1_jobs).is_file():
             counts = importers.import_jobs(self.store, self.opts.sync_v1_jobs)
             new += counts["jobs"]
@@ -500,6 +502,7 @@ class Courier:
             errors += counts["errors"]
         state["lastRun"] = self.store.now()
         state["lastErrors"] = errors[:20]
+        state["lastWarnings"] = warnings[:20]  # e.g. an attachment changed after its import: shown, not blocking
         if new:
             state["lastNew"] = self.store.now()
         state.setdefault("lastNew", None)

@@ -65,7 +65,7 @@ def import_files(store: Store, root: pathlib.Path | str, *, space: str | None = 
     space_id = library.resolve_space(store, space)
     sp = store.space(space_id)
     module = library.protocol_of(sp)
-    counts = {"messages": 0, "skipped": 0, "receipts": 0, "members": 0, "errors": []}
+    counts = {"messages": 0, "skipped": 0, "receipts": 0, "members": 0, "errors": [], "warnings": []}
     files = sorted((root / "inbox").glob("*/*.json"))
     agents = {p.parent.name for p in files} | {p.parent.name for p in (root / "receipts").glob("*/*.json")}
     for message_path in files:
@@ -82,6 +82,23 @@ def import_files(store: Store, root: pathlib.Path | str, *, space: str | None = 
             try:
                 raw = message_path.read_bytes()
                 v1 = json.loads(raw)
+                message_id = str(uuid.uuid5(V1_NAMESPACE, str(v1["id"])))
+                known = store.message(message_id)
+                if known is not None:
+                    # Imported before: the v1 file is the identity. Unchanged, the stored envelope stays as it is
+                    # (an attachment that changed since is a warning) and only the receipts below are new.
+                    if known["fields"].get("legacySha256") != env.sha256(raw):
+                        raise CorreioError(f"v1 file changed since its import as {message_id}")
+                    for item in store.q("SELECT path, sha256, bytes FROM attachments WHERE message_id=?",
+                                        (message_id,)):
+                        path = pathlib.Path(item["path"])
+                        if not path.is_file() or path.stat().st_size != item["bytes"] or (
+                                library.sha256_file(path) != item["sha256"] and item["sha256"] != "0" * 64):
+                            counts["warnings"].append({"path": item["path"], "message": message_id,
+                                                       "warning": "attachment changed or missing since the import"})
+                    counts["skipped"] += 1
+                    _import_v1_receipt(store, root, message_path, message_id, counts)
+                    continue
                 payload = v1.get("payload") if isinstance(v1.get("payload"), dict) else {}
                 thread = library.infer_thread(v1.get("subject"), v1.get("body"), payload)
                 fields, _structured = _scalar_split(payload)
@@ -103,18 +120,23 @@ def import_files(store: Store, root: pathlib.Path | str, *, space: str | None = 
                 created, message_id = _store_imported(store, sp, header, fields, attachments, body,
                                                       module.TYPES[kind], str(message_path))
                 counts["messages" if created else "skipped"] += 1
-                receipt_path = root / "receipts" / message_path.parent.name / message_path.name
-                if receipt_path.is_file() and store.receipt(message_id) is None:
-                    v1r = json.loads(receipt_path.read_text(encoding="utf-8"))
-                    message = store.message(message_id)
-                    store.x("INSERT INTO receipts(message_id, agent, accepted, disposition, message_sha256, "
-                            "receipted_at) VALUES (?,?,?,?,?,?)",
-                            (message_id, message["to_agent"], 1, str(v1r.get("disposition") or "recibo v1"),
-                             message["sha256"], str(v1r.get("receiptedAt") or store.now())))
-                    counts["receipts"] += 1
+                _import_v1_receipt(store, root, message_path, message_id, counts)
             except (OSError, ValueError, KeyError, TypeError, CorreioError) as exc:
                 counts["errors"].append({"path": str(message_path), "error": str(exc)[:300]})
     return counts
+
+
+def _import_v1_receipt(store: Store, root: pathlib.Path, message_path: pathlib.Path, message_id: str,
+                       counts: dict[str, Any]) -> None:
+    receipt_path = root / "receipts" / message_path.parent.name / message_path.name
+    if receipt_path.is_file() and store.receipt(message_id) is None:
+        v1r = json.loads(receipt_path.read_text(encoding="utf-8"))
+        message = store.message(message_id)
+        store.x("INSERT INTO receipts(message_id, agent, accepted, disposition, message_sha256, "
+                "receipted_at) VALUES (?,?,?,?,?,?)",
+                (message_id, message["to_agent"], 1, str(v1r.get("disposition") or "recibo v1"),
+                 message["sha256"], str(v1r.get("receiptedAt") or store.now())))
+        counts["receipts"] += 1
 
 
 # -- 2.7 swarm runs -------------------------------------------------------------------------------------------------------
