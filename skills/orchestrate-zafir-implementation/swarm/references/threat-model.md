@@ -30,7 +30,7 @@ Untrusted inputs cross the interface through launch JSON, event/report JSON, mod
 | Git/WIP destruction | Bootstrap creates only the recorded worktree/branch; an unowned worktree must be clean at `baseSha`; an existing branch must already be at its base, because Herdr ignores `--base` for it; no reset, force, push, or automatic cleanup |
 | LLM output grants authority | Scripts validate facts and routes only; no script accepts product scope, failing gates, permissions, findings, or integration |
 | Wake sent to wrong agent | Route each event to its validated recipient, by name and by its member pane when the name is absent or ambiguous |
-| Sender spoofing between agents | Inside Herdr, `send` and `receipt` refuse an agent name whose member pane is not the calling `HERDR_PANE_ID` |
+| Sender spoofing between agents | Inside Herdr, `send` and `receipt` accept an agent name only when its recorded member pane is the calling `HERDR_PANE_ID` (no recorded pane is refused); service mail (`correio`, `swarmctl`) is the only exception |
 | Protocol drift | A space pins protocol and version; published protocol modules are pinned by sha256 and the loader refuses changed bytes; a legacy 2.7 import is read-only |
 | Lost wake | Persistent delivery ledger; retry until receipt with bounded exponential backoff |
 | Duplicate/injected wake | Prompt only ready recipients; the receipt row is the idempotency boundary; recheck receipt immediately before prompting |

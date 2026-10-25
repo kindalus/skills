@@ -178,11 +178,25 @@ class OrchestrationProtocolTest(CorreioCase):
         with self.assertRaisesRegex(CorreioError, "recorded in pane p-orquestrador"):
             library.receipt(self.store, message_id=sent["id"], agent="orquestrador", disposition="spoofed")
         library.add_member(self.store, "orq", "sem-pane", "other")
-        with self.assertRaisesRegex(CorreioError, "belongs to s606-preparer"):
+        with self.assertRaisesRegex(CorreioError, "sem-pane has no pane recorded"):  # p-s606-preparer is not its pane
             self.send(sender="sem-pane", to="orquestrador")
         os.environ["HERDR_PANE_ID"] = "p-orquestrador"
         library.receipt(self.store, message_id=sent["id"], agent="orquestrador", disposition="mine")
+        os.environ["HERDR_PANE_ID"] = "p-de-ninguem"  # inside Herdr, a member without a pane proves nothing
+        with self.assertRaisesRegex(CorreioError, "sem-pane has no pane recorded in orq"):
+            self.send(sender="sem-pane", to="orquestrador")
+        ask = self.send(sender="orquestrador", to="sem-pane", check_pane=False)
+        with self.assertRaisesRegex(CorreioError, "sem-pane has no pane recorded in orq"):
+            library.receipt(self.store, message_id=ask["id"], agent="sem-pane", disposition="x")
+        with self.assertRaisesRegex(CorreioError, "recorded in pane p-orquestrador"):
+            self.send(sender="orquestrador", to="s606-preparer")
+        # The courier is a service process: its system mail is never checked against a pane.
+        self.assertIsNotNone(library.system_mail(self.store, to="orquestrador", type="INFO", subject="s", body="",
+                                                 thread="correio/teste", space="orq"))
+        library.update_member(self.store, "orq", "sem-pane", pane_id="p-de-ninguem")
+        self.send(sender="sem-pane", to="orquestrador")
         os.environ.pop("HERDR_PANE_ID")
+        library.update_member(self.store, "orq", "sem-pane", pane_id=None)
         self.send(sender="sem-pane", to="orquestrador")  # outside Herdr nothing is checked
 
     def test_attachments_are_cited_by_path_and_hash(self) -> None:

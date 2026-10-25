@@ -186,18 +186,25 @@ def bump_generation(store: Store, space_id: str, agent: str, *, to: int | None =
 
 
 # -- sender authenticity --------------------------------------------------------------------------------------------
-def verify_pane(members: dict[str, dict[str, Any]], agent: str) -> None:
-    """Inside Herdr, an agent acts only as itself: its member pane must be the calling pane."""
+def verify_pane(members: dict[str, dict[str, Any]], agent: str, space_id: str = "") -> None:
+    """Inside Herdr ($HERDR_PANE_ID set) an agent acts only as itself: the calling pane must be the pane
+    recorded for it in the space. Outside Herdr nothing is checked.
+
+    Service processes are the explicit exception: the courier's own mail goes through ``system_mail``
+    (``system=True``, sender ``correio``) and swarmctl's INFO through ``system=True`` (sender ``swarmctl``);
+    neither runs in an agent's pane. The orchestrator's host scripts run without $HERDR_PANE_ID.
+    """
     pane = os.environ.get("HERDR_PANE_ID")
     if not pane:
         return
     member = members.get(agent)
-    if member and member.get("pane_id") and member["pane_id"] != pane:
-        raise CorreioError(f"{agent} is recorded in pane {member['pane_id']}, not in this pane ({pane}); "
+    recorded = member.get("pane_id") if member else None
+    if not recorded:
+        raise CorreioError(f"{agent} has no pane recorded in {space_id or 'this space'}, so this pane ({pane}) "
+                           f"cannot act as it: record it with correio member update --agent {agent} --pane {pane}")
+    if recorded != pane:
+        raise CorreioError(f"{agent} is recorded in pane {recorded}, not in this pane ({pane}); "
                            "agents send and receipt only as themselves")
-    others = sorted(name for name, m in members.items() if name != agent and m.get("pane_id") == pane)
-    if others:
-        raise CorreioError(f"this pane ({pane}) belongs to {others[0]}, not to {agent}")
 
 
 # -- send and receipt ------------------------------------------------------------------------------------------------
@@ -267,7 +274,7 @@ def send(store: Store, *, space: str, sender: str, to: str, type: str, thread: s
             raise CorreioError(f"space {space} is closed ({sp['state']})")
         members = store.members(space)
         if not system and check_pane:
-            verify_pane(members, sender)
+            verify_pane(members, sender, space)
         draft = {"type": type, "thread": thread, "subject": subject, "fields": dict(fields or {})}
         try:
             module.prepare(sp, draft)
@@ -324,7 +331,7 @@ def receipt(store: Store, *, message_id: str, agent: str, disposition: str, acce
         if message["to_agent"] != agent:
             raise CorreioError("receipt actor is not the message recipient")
         if check_pane:
-            verify_pane(store.members(sp["id"], include_left=True), agent)
+            verify_pane(store.members(sp["id"], include_left=True), agent, sp["id"])
         new = {"message_id": message_id, "agent": agent, "accepted": bool(accepted), "disposition": disposition,
                "message_sha256": message["sha256"], "receipted_at": store.now()}
         existing = store.receipt(message_id)
