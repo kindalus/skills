@@ -425,6 +425,18 @@ class SwarmV3Test(unittest.TestCase):
         self.assertEqual(space["state"], "cancelled")
         self.assertIsNotNone(space["closed_at"])
 
+    def test_a_late_receipt_never_reopens_a_terminal_space(self) -> None:
+        root, launch = self.init()
+        ready = self.ev(root, launch, "t123-principal", "orchestrator", "SWARM_READY")
+        lease = self.ev(root, launch, "t123-principal", "orchestrator", "LEASE_REQUEST", {}, {"candidateSha": "c" * 40})
+        cancel = self.ev(root, launch, "orchestrator", "t123-principal", "CANCEL", {"reason": "owner"})
+        self.receipt(root, launch, cancel, "t123-principal", True, "stopping")
+        self.receipt(root, launch, ready, "orchestrator", True, "late")
+        self.receipt(root, launch, lease, "orchestrator", True, "late")
+        space = self.store().space("t123")
+        self.assertEqual((space["state"], self.space_state()["state"]), ("cancelled", "cancelled"))
+        self.assertIsNotNone(space["closed_at"])
+
     # -- bootstrap (ported) ----------------------------------------------------------------------------------------
     def test_responsible_bootstrap_dry_run_has_no_side_effects(self) -> None:
         result = swarmctl.bootstrap_responsible(self.contract_path, self.run_dir, dry_run=True, no_supervisor=False)

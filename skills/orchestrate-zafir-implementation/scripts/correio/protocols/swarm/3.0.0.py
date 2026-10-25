@@ -358,13 +358,15 @@ def project(space: dict[str, Any], message: dict[str, Any], receipt: dict[str, A
                 if key in fields:
                     cols[col] = fields[key]
             db.upsert_task(sid, task_id, by, **cols)
-    if kind in SPACE_STATES:
+    # accepted and cancelled are final: a late receipt of an older event never moves the space out of them.
+    terminal = state.get("state") in TERMINAL
+    if kind in SPACE_STATES and not terminal:
         state["state"] = SPACE_STATES[kind]
         db.set_space_state(sid, state, by)
-    if kind == "SLICE_ACCEPTED":
+    if kind == "SLICE_ACCEPTED" and not terminal:
         state.update(state="accepted", acceptedSha=fields["candidateSha"])
         db.set_space_state(sid, state, by)
-    if kind == "CANCEL" and message["to_agent"] == principal_name(launch):
+    if kind == "CANCEL" and message["to_agent"] == principal_name(launch) and not terminal:
         state["state"] = "cancelled"
         db.set_space_state(sid, state, by)
     if kind == "AGENT_READY":
