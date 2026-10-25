@@ -91,11 +91,10 @@ def import_files(store: Store, root: pathlib.Path | str, *, space: str | None = 
                         raise CorreioError(f"v1 file changed since its import as {message_id}")
                     for item in store.q("SELECT path, sha256, bytes FROM attachments WHERE message_id=?",
                                         (message_id,)):
-                        path = pathlib.Path(item["path"])
-                        if not path.is_file() or path.stat().st_size != item["bytes"] or (
-                                library.sha256_file(path) != item["sha256"] and item["sha256"] != "0" * 64):
+                        warning = _attachment_drift(item)
+                        if warning:
                             counts["warnings"].append({"path": item["path"], "message": message_id,
-                                                       "warning": "attachment changed or missing since the import"})
+                                                       "warning": warning})
                     counts["skipped"] += 1
                     _import_v1_receipt(store, root, message_path, message_id, counts)
                     continue
@@ -124,6 +123,22 @@ def import_files(store: Store, root: pathlib.Path | str, *, space: str | None = 
             except (OSError, ValueError, KeyError, TypeError, CorreioError) as exc:
                 counts["errors"].append({"path": str(message_path), "error": str(exc)[:300]})
     return counts
+
+
+def _attachment_drift(item: Any) -> str | None:
+    """Why an imported attachment no longer matches, or None. Never raises: any failure to read it (missing, no
+    permission, a directory) is a warning, so it never stops the receipts that follow."""
+    path = pathlib.Path(item["path"])
+    try:
+        if not path.is_file():
+            return "attachment missing or not a file since the import"
+        if path.stat().st_size != item["bytes"]:
+            return "attachment changed since the import (size)"
+        if item["sha256"] != "0" * 64 and library.sha256_file(path) != item["sha256"]:
+            return "attachment changed since the import (sha256)"
+    except OSError as exc:
+        return f"attachment unreadable: {exc.strerror or exc}"
+    return None
 
 
 def _import_v1_receipt(store: Store, root: pathlib.Path, message_path: pathlib.Path, message_id: str,

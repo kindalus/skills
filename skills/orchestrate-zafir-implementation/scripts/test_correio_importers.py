@@ -84,6 +84,34 @@ class V1ImportTest(CorreioCase):
         message = library.resolve_message(self.store, "20261025T130000000000Z-aaaaaaaa", "orquestrador")
         self.assertEqual(self.store.receipt(message)["disposition"], "lido")
 
+    def test_an_unreadable_attachment_warns_and_later_receipts_still_import(self) -> None:
+        library.create_space(self.store, space_id="orq", kind="orchestration", protocol="orchestration",
+                             version="1.0.0")
+        root = self.mailbox()
+        self.assertEqual(importers.import_files(self.store, root)["errors"], [])
+        brief = self.temp / "brief.md"
+        receipt = root / "receipts" / "orquestrador" / "20261025T130000000000Z-aaaaaaaa.json"
+        receipt.parent.mkdir(parents=True, exist_ok=True)
+        message = library.resolve_message(self.store, "20261025T130000000000Z-aaaaaaaa", "orquestrador")
+        for case in ("chmod 000", "directory", "missing"):
+            with self.subTest(case=case):
+                if case == "chmod 000":
+                    brief.chmod(0)
+                elif case == "directory":
+                    brief.chmod(0o600)
+                    brief.unlink()
+                    brief.mkdir()
+                else:
+                    brief.rmdir()
+                again = importers.import_files(self.store, root)
+                self.assertEqual(again["errors"], [])
+                self.assertEqual([w["path"] for w in again["warnings"]], [str(brief)])
+                if case == "chmod 000":  # the receipt arrives while the attachment cannot be read
+                    receipt.write_text(json.dumps({"id": "20261025T130000000000Z-aaaaaaaa", "agent": "orquestrador",
+                                                   "disposition": "lido", "receiptedAt": "2026-10-25T13:05:00Z"}))
+                    self.assertEqual(importers.import_files(self.store, root)["receipts"], 1)
+                    self.assertEqual(self.store.receipt(message)["disposition"], "lido")
+
     @unittest.skipUnless(os.environ.get("CORREIO_TEST_V1_COPY"), "set CORREIO_TEST_V1_COPY to a copy of correio/")
     def test_a_copy_of_the_live_v1_mailbox_imports_cleanly(self) -> None:
         library.create_space(self.store, space_id="orq", kind="orchestration", protocol="orchestration",
