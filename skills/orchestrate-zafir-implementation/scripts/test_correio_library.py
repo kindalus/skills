@@ -83,7 +83,67 @@ def _owner_that_forks_and_dies(db: str, how: str, out: str) -> None:
         os._exit(0)  # the owner dies holding the lock; the kernel releases what it alone held
 
 
+FORK_WHILE_WAITING = r"""
+import os, pathlib, sys, threading, time
+from correio.store import Store
+db = pathlib.Path(sys.argv[1])
+ready, go, acquired = threading.Event(), threading.Event(), threading.Event()
+def writer():
+    store = Store(db)
+    ready.set()
+    go.wait(30)
+    with store.tx():
+        acquired.set()
+        time.sleep(30)
+threading.Thread(target=writer, daemon=True).start()
+assert ready.wait(30)
+print("READY", flush=True)
+assert sys.stdin.readline().strip() == "GO"
+go.set()
+deadline = time.monotonic() + 10
+while str(db) + ".write.lock" not in [os.readlink(f) for f in pathlib.Path("/proc/self/fd").iterdir()
+                                      if f.exists()]:  # the writer has opened its lock fd and waits in flock
+    if time.monotonic() > deadline:
+        raise SystemExit("the writer never opened its lock fd")
+    time.sleep(0.01)
+time.sleep(0.1)
+child = os.fork()  # from another thread, while the writer waits
+if child == 0:
+    time.sleep(6)
+    os._exit(0)
+print("FORKED", child, flush=True)
+assert acquired.wait(30)
+os._exit(0)  # dies holding the lock
+"""
+
+
 class StoreTest(CorreioCase):
+    def test_a_fork_while_another_thread_waits_for_the_lock_leaves_nothing_behind(self) -> None:
+        import fcntl
+        import time
+        env = {**os.environ, "PYTHONPATH": str(HERE), "PYTHONDONTWRITEBYTECODE": "1"}
+        with open(str(self.store.path) + ".write.lock", "a+") as lock:
+            owner = subprocess.Popen([sys.executable, "-u", "-c", FORK_WHILE_WAITING, str(self.store.path)], env=env,
+                                     text=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+            try:
+                self.assertEqual(owner.stdout.readline().strip(), "READY")
+                fcntl.flock(lock, fcntl.LOCK_EX)  # the owner's writer will wait behind this
+                owner.stdin.write("GO\n")
+                owner.stdin.flush()
+                forked = owner.stdout.readline().split()
+                self.assertEqual(forked[0], "FORKED")
+                child = int(forked[1])
+                fcntl.flock(lock, fcntl.LOCK_UN)
+                owner.wait(30)
+            finally:
+                if owner.poll() is None:
+                    owner.kill()
+        start = time.time()
+        with self.store.tx():
+            waited = time.time() - start
+        self.assertTrue(pathlib.Path(f"/proc/{child}").exists())  # the child is still alive...
+        self.assertLess(waited, 2.0)  # ...and holds nothing
+
     def test_a_child_left_by_a_dead_writer_does_not_keep_the_lock(self) -> None:
         import time
         for how in ("fork", "exec"):

@@ -8,6 +8,7 @@ import json
 import os
 import pathlib
 import sqlite3
+import threading
 import time
 from typing import Any, Iterator
 
@@ -23,39 +24,58 @@ class CorreioError(RuntimeError):
 # Writers queue on a blocking flock of ``<db>.write.lock`` before BEGIN IMMEDIATE. SQLite's busy handler polls
 # with growing sleeps, so a writer in a loop re-takes the lock before a sleeping one wakes, and the sleeper can
 # starve past busy_timeout ("database is locked") while the other's burst lasts. A blocked flock waiter is woken
-# by the kernel at the release, so writers take turns. Per process the lock is shared by every Store of the same
-# file (flock is per open file), so a second Store in the process never waits on its own process.
-_WRITE_LOCKS: dict[str, list[Any]] = {}
+# by the kernel at the release, so writers take turns. Within one thread the lock is shared by every Store of
+# the same file (flock is per open file), so a second Store there never waits on its own thread; other threads
+# open their own descriptor and queue like other processes.
+#
+# Fork: every lock descriptor is in ``_LOCK_FDS`` from the moment it is opened, before its flock, until it is
+# closed, and opening, registering and closing hold ``_FORK_GUARD``, which a fork takes before it starts and
+# frees after it. A forked child therefore knows each descriptor it inherited, including one another thread was
+# still waiting on, and closes them all without LOCK_UN: the open file description is shared with the parent,
+# so an unlock would free the parent's lock, and a copy kept open would hold it after the parent dies.
+_WRITE_LOCKS: dict[tuple[str, int], list[Any]] = {}
+_LOCK_FDS: set[int] = set()
+_FORK_GUARD = threading.Lock()
 
 
-def _forget_inherited_locks() -> None:
-    """In a forked child: close the inherited lock descriptors and forget them, without LOCK_UN. The open file
-    description is shared with the parent, so an unlock here would free the parent's lock, and a copy kept
-    open would hold it after the parent dies. A child that unwinds the parent's ``with`` sees a dead entry."""
+def _before_fork() -> None:
+    _FORK_GUARD.acquire()
+
+
+def _after_fork_in_parent() -> None:
+    _FORK_GUARD.release()
+
+
+def _after_fork_in_child() -> None:
+    for fd in _LOCK_FDS:
+        with contextlib.suppress(OSError):
+            os.close(fd)
+    _LOCK_FDS.clear()
     for entry in _WRITE_LOCKS.values():
-        if entry[0] is not None:
-            os.close(entry[0])
-            entry[0] = None
+        entry[0] = None  # a ``with`` this child unwinds finds nothing of its own to free
     _WRITE_LOCKS.clear()
+    _FORK_GUARD.release()  # taken by the forking thread in _before_fork; the child has only that thread
 
 
-os.register_at_fork(after_in_child=_forget_inherited_locks)
+os.register_at_fork(before=_before_fork, after_in_parent=_after_fork_in_parent, after_in_child=_after_fork_in_child)
 
 
 @contextlib.contextmanager
 def _writer_turn(db: pathlib.Path) -> Iterator[None]:
-    key = str(db.resolve()) + ".write.lock"
+    key = (str(db.resolve()) + ".write.lock", threading.get_ident())
     entry = _WRITE_LOCKS.get(key)
     if entry is None:
-        old_umask = os.umask(0o077)
-        try:  # O_CLOEXEC: an exec'd child never inherits it either
-            fd = os.open(key, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o600)
-        finally:
-            os.umask(old_umask)
+        with _FORK_GUARD:
+            old_umask = os.umask(0o077)
+            try:  # O_CLOEXEC: an exec'd child never inherits it either
+                fd = os.open(key[0], os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o600)
+            finally:
+                os.umask(old_umask)
+            _LOCK_FDS.add(fd)
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX)
+            fcntl.flock(fd, fcntl.LOCK_EX)  # outside the guard: a fork may happen while this waits
         except BaseException:
-            os.close(fd)
+            _close_lock_fd(fd)
             raise
         entry = _WRITE_LOCKS[key] = [fd, 0]
     entry[1] += 1
@@ -65,9 +85,19 @@ def _writer_turn(db: pathlib.Path) -> Iterator[None]:
         entry[1] -= 1
         if entry[1] == 0 and entry[0] is not None:  # None: forgotten in a forked child, nothing of ours to free
             del _WRITE_LOCKS[key]
-            fcntl.flock(entry[0], fcntl.LOCK_UN)
-            os.close(entry[0])
-            entry[0] = None
+            fd, entry[0] = entry[0], None
+            with _FORK_GUARD:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+                _close_lock_fd(fd, guarded=True)
+
+
+def _close_lock_fd(fd: int, *, guarded: bool = False) -> None:
+    if not guarded:
+        with _FORK_GUARD:
+            return _close_lock_fd(fd, guarded=True)
+    if fd in _LOCK_FDS:  # a forked child has already closed and forgotten it
+        _LOCK_FDS.discard(fd)
+        os.close(fd)
 
 
 def state_root() -> pathlib.Path:
