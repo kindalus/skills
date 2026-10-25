@@ -171,6 +171,20 @@ class DeliveryTest(CourierCase):
         self.assertTrue(any("sem recibo" in title for title, _body in self.herdr.notes))
         self.assertIsNotNone(self.store.one("SELECT 1 FROM heartbeat WHERE component='courier'"))
 
+    def test_only_a_protocol_that_allows_it_takes_a_courier_receipt(self) -> None:
+        self.swarm()
+        event = self.swarm_event("s900-principal", "s900-reviewer", "REVIEW_REQUEST", taskId="S900-T01",
+                                 assignmentId="a1", revision=1, candidateSha="a" * 40)
+        with self.assertRaisesRegex(library.CorreioError, "swarm 3.0.0 does not allow"):
+            library.receipt(self.store, message_id=event, agent="s900-reviewer",
+                            disposition=library.READONLY_DISPOSITION, by="correio")
+        self.assertIsNone(self.store.receipt(event))
+        self.assertIsNone(self.store.task("s900", "S900-T01"))
+        mail = self.send(sender="orquestrador", to="consultor-claude")["id"]
+        self.assertEqual(library.receipt(self.store, message_id=mail, agent="consultor-claude",
+                                         disposition=library.READONLY_DISPOSITION, by="correio")["receipted_by"],
+                         "correio")
+
     def test_backoff_survives_long_retry_runs(self) -> None:
         self.assertEqual(daemon.delay_for(1025, 30.0, 480.0), 480.0)  # 2**1024 overflowed a float
         self.assertEqual(daemon.delay_for(10 ** 6, 30.0, 480.0), 480.0)

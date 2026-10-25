@@ -385,6 +385,9 @@ def receipt(store: Store, *, message_id: str, agent: str, disposition: str, acce
         module = protocol_of(sp)
         if message["to_agent"] != agent:
             raise CorreioError("receipt actor is not the message recipient")
+        if by is not None and not getattr(module, "READONLY_RECEIPTS", False):
+            raise CorreioError(f"{sp['protocol']} {sp['version']} does not allow a receipt by {by}: "
+                               "its receipts project state, so the recipient receipts itself")
         if check_pane and by is None:
             verify_pane(store.members(sp["id"], include_left=True), agent, sp["id"])
         new = {"message_id": message_id, "agent": agent, "accepted": bool(accepted), "disposition": disposition,
