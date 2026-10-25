@@ -59,7 +59,7 @@ A `systemd --user` service (`correio-<repo-key>.service`) runs `correio daemon`;
 
 ### Host queue
 
-Gates, batches and windows queue in the `jobs` table: `correio jobs add --kind gate|lote|janela --who <slice> [--priority 1] -- <command>`, `correio jobs list [--last <n>]`. The queue runner claims one at a time with `correio jobs next` (highest priority, then arrival) and closes it with `correio jobs finish <id> --exit <code>`.
+Gates, batches and windows queue in the `jobs` table: `correio jobs add --kind gate|lote|janela --who <slice> [--priority 1] -- <command>`, `correio jobs list [--last <n>]`. One runner serves the queue at a time (its own lock). It claims one job at a time with `correio jobs next --runner-pid <its pid>` (highest priority, then arrival; `jobs start <id>` is refused while another job runs), records the process running the command with `correio jobs attach <id> --pid <pid>`, and closes it with `correio jobs finish <id> --exit <code>`. Both are recorded by PID, boot and start time. `correio jobs recover` closes with exit -1 only a running job whose command (or, before attach, runner) is no longer that process; an orphan command of a dead runner keeps the queue until it ends.
 
 ### Evidence
 

@@ -261,7 +261,65 @@ class OrchestrationProtocolTest(CorreioCase):
             self.send(sender="orquestrador", to="s606-preparer")
 
 
+def _starter(db: str, job_id: str, barrier, queue) -> None:
+    store = Store(db)
+    try:
+        barrier.wait(30)
+        library.jobs_start(store, job_id, runner_pid=os.getpid())
+        queue.put(("ok", job_id))
+    except CorreioError as exc:
+        queue.put(("refused", str(exc)))
+    finally:
+        store.close()
+
+
 class JobsTest(CorreioCase):
+    def test_two_simultaneous_starts_run_one_job(self) -> None:
+        a = library.jobs_add(self.store, kind="gate", who="s601", cmd="true")
+        b = library.jobs_add(self.store, kind="gate", who="s602", cmd="true")
+        ctx = multiprocessing.get_context("spawn")
+        barrier, queue = ctx.Barrier(2), ctx.Queue()
+        procs = [ctx.Process(target=_starter, args=(str(self.store.path), job["id"], barrier, queue))
+                 for job in (a, b)]
+        for proc in procs:
+            proc.start()
+        for proc in procs:
+            proc.join(60)
+        results = sorted(queue.get(timeout=5) for _ in procs)
+        self.assertEqual([r[0] for r in results], ["ok", "refused"], results)
+        self.assertIn("is running", results[1][1])
+        self.assertEqual(len([j for j in library.jobs_list(self.store) if j["state"] == "running"]), 1)
+
+    def test_recovery_keeps_a_live_executor_and_closes_a_dead_one(self) -> None:
+        live = subprocess.Popen(["sleep", "60"])
+        try:
+            job = library.jobs_add(self.store, kind="gate", who="s601", cmd="sleep 60")
+            library.jobs_next(self.store, runner_pid=999999999)  # a runner that is gone
+            library.jobs_attach(self.store, job["id"], live.pid)  # ...but its command still runs
+            self.assertEqual(library.jobs_recover(self.store), [{"id": job["id"], "action": "alive", "pid": live.pid}])
+            self.assertEqual(library.jobs_list(self.store)[0]["state"], "running")
+            self.assertIsNone(library.jobs_next(self.store))
+            live.kill()
+            live.wait()
+            self.assertEqual(library.jobs_recover(self.store),
+                             [{"id": job["id"], "action": "interrupted", "pid": live.pid}])
+            self.assertEqual(library.jobs_list(self.store, last=1)[0]["exit"], -1)
+        finally:
+            live.kill()
+            live.wait()
+        # The same PID with another start time is another process: a reused PID never keeps a job alive.
+        other = library.jobs_add(self.store, kind="lote", who="s602", cmd="x")
+        library.jobs_next(self.store, runner_pid=os.getpid())
+        self.store.x("UPDATE jobs SET runner_start='other-boot:1' WHERE id=?", (other["id"],))
+        self.assertEqual(library.jobs_recover(self.store)[0]["action"], "interrupted")
+        # A runner that is alive keeps its job while it has not attached the command yet.
+        third = library.jobs_add(self.store, kind="lote", who="s603", cmd="y")
+        library.jobs_next(self.store, runner_pid=os.getpid())
+        self.assertEqual(library.jobs_recover(self.store), [{"id": third["id"], "action": "alive", "pid": os.getpid()}])
+        # An imported running row has no executor to check: it is closed, as before.
+        self.store.x("UPDATE jobs SET runner_pid=NULL, runner_start=NULL WHERE id=?", (third["id"],))
+        self.assertEqual(library.jobs_recover(self.store)[0]["action"], "interrupted")
+
     def test_priority_then_arrival_and_one_running_at_a_time(self) -> None:
         a = library.jobs_add(self.store, kind="gate", who="s601", cmd="bash fila-merge.sh s601 x r1")
         b = library.jobs_add(self.store, kind="lote", who="s591", cmd="bash lote.sh")

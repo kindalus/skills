@@ -3,7 +3,7 @@
   space create|close|show|list      member add|update|leave
   send                              receipt (one, or --all-info)
   inbox, show, thread, open, search export, import-files, import-run, import-jobs
-  jobs add|next|start|finish|list   daemon, watchdog, backup
+  jobs add|next|start|attach|finish|recover|list   daemon, watchdog, backup
   legacy <v1 subcommand>            the v1 file mailbox, kept for rollback
 
 The database is $CORREIO_DB or ~/.local/state/orchestrate-zafir-implementation/<$CORREIO_REPO_KEY>/correio.db.
@@ -258,9 +258,13 @@ def cmd_jobs(args: argparse.Namespace, store: Store) -> Any:
         cmd = " ".join(parts).strip()
         return library.jobs_add(store, kind=args.kind, who=args.who, cmd=cmd, priority=args.priority, job_id=args.id)
     if args.jobs_command == "next":
-        return library.jobs_next(store)
+        return library.jobs_next(store, runner_pid=args.runner_pid)
     if args.jobs_command == "start":
-        return library.jobs_start(store, args.job_id)
+        return library.jobs_start(store, args.job_id, runner_pid=args.runner_pid)
+    if args.jobs_command == "attach":
+        return library.jobs_attach(store, args.job_id, args.pid)
+    if args.jobs_command == "recover":
+        return library.jobs_recover(store)
     if args.jobs_command == "finish":
         return library.jobs_finish(store, args.job_id, args.exit)
     return library.jobs_list(store, everything=args.all, last=args.last)
@@ -390,12 +394,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--priority", type=int, default=0)
     p.add_argument("--id", help=argparse.SUPPRESS)
     p.add_argument("cmd", nargs=argparse.REMAINDER)
-    jobs.add_parser("next", help="claim the next queued job unless one is running")
-    for name in ("start", "finish"):
+    p = jobs.add_parser("next", help="claim the next queued job unless one is running")
+    p.add_argument("--runner-pid", type=int, help="the runner that waits for the job (its identity is recorded)")
+    for name in ("start", "finish", "attach"):
         p = jobs.add_parser(name)
         p.add_argument("job_id")
+        if name == "start":
+            p.add_argument("--runner-pid", type=int)
         if name == "finish":
             p.add_argument("--exit", type=int, required=True)
+        if name == "attach":
+            p.add_argument("--pid", type=int, required=True, help="the process running the job's command")
+    jobs.add_parser("recover", help="close running jobs whose command and runner are gone (exit -1)")
     p = jobs.add_parser("list")
     p.add_argument("--all", action="store_true")
     p.add_argument("--last", type=int)

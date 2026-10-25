@@ -585,25 +585,79 @@ def jobs_add(store: Store, *, kind: str, who: str, cmd: str, priority: int = 0, 
         return _job(store.one("SELECT * FROM jobs WHERE id=?", (job_id,)))
 
 
-def jobs_next(store: Store) -> dict[str, Any] | None:
-    """Claim the next queued job (highest priority, then arrival) unless one is running."""
+def process_identity(pid: Any) -> str | None:
+    """``<boot id>:<start time>`` of a live process, or None: a PID reused later has another identity."""
+    if type(pid) is not int or pid <= 0:
+        return None
+    try:
+        stat = pathlib.Path(f"/proc/{pid}/stat").read_text()
+        boot = pathlib.Path("/proc/sys/kernel/random/boot_id").read_text().strip()
+    except OSError:
+        return None
+    fields = stat[stat.rindex(")") + 2:].split()  # fields[0] is field 3 (state); field 22 is the start time
+    if fields[0] in {"Z", "X"}:
+        return None
+    return f"{boot}:{fields[19]}"
+
+
+def _claim(store: Store, job_id: str, runner_pid: int | None) -> dict[str, Any]:
+    store.x("UPDATE jobs SET state='running', started_at=?, runner_pid=?, runner_start=? WHERE id=?",
+            (store.now(), runner_pid, process_identity(runner_pid), job_id))
+    return _job(store.one("SELECT * FROM jobs WHERE id=?", (job_id,)))
+
+
+def _running(store: Store) -> Any:
+    return store.one("SELECT id FROM jobs WHERE state='running'")
+
+
+def jobs_next(store: Store, *, runner_pid: int | None = None) -> dict[str, Any] | None:
+    """Claim the next queued job (highest priority, then arrival) unless one is running; ``runner_pid`` is
+    the runner that will wait for it."""
     with store.tx():
-        if store.one("SELECT 1 FROM jobs WHERE state='running'"):
+        if _running(store):
             return None
         row = store.one("SELECT * FROM jobs WHERE state='queued' ORDER BY priority DESC, seq LIMIT 1")
         if row is None:
             return None
-        store.x("UPDATE jobs SET state='running', started_at=? WHERE id=?", (store.now(), row["id"]))
-        return _job(store.one("SELECT * FROM jobs WHERE id=?", (row["id"],)))
+        return _claim(store, row["id"], runner_pid)
 
 
-def jobs_start(store: Store, job_id: str) -> dict[str, Any]:
+def jobs_start(store: Store, job_id: str, *, runner_pid: int | None = None) -> dict[str, Any]:
+    """Claim one named job; refused while another runs (one at a time, as ``next``)."""
     with store.tx():
-        cur = store.x("UPDATE jobs SET state='running', started_at=? WHERE id=? AND state='queued'",
-                      (store.now(), job_id))
-        if cur.rowcount != 1:
+        running = _running(store)
+        if running:
+            raise CorreioError(f"job {running['id']} is running; one job at a time")
+        if store.one("SELECT 1 FROM jobs WHERE id=? AND state='queued'", (job_id,)) is None:
             raise CorreioError(f"job {job_id} is not queued")
+        return _claim(store, job_id, runner_pid)
+
+
+def jobs_attach(store: Store, job_id: str, pid: int) -> dict[str, Any]:
+    """Record the process that runs the job's command (it may outlive its runner)."""
+    identity = process_identity(pid)
+    if identity is None:
+        raise CorreioError(f"no live process {pid}")
+    with store.tx():
+        cur = store.x("UPDATE jobs SET exec_pid=?, exec_start=? WHERE id=? AND state='running'", (pid, identity, job_id))
+        if cur.rowcount != 1:
+            raise CorreioError(f"job {job_id} is not running")
         return _job(store.one("SELECT * FROM jobs WHERE id=?", (job_id,)))
+
+
+def jobs_recover(store: Store) -> list[dict[str, Any]]:
+    """For each running job: ``alive`` while its command (or, before it is attached, its runner) is the same
+    live process; otherwise ``interrupted``, finished with exit -1 for the orchestrator to decide."""
+    report = []
+    with store.tx():
+        for row in store.q("SELECT * FROM jobs WHERE state='running' ORDER BY seq"):
+            pid, start = (row["exec_pid"], row["exec_start"]) if row["exec_pid"] else (row["runner_pid"],
+                                                                                      row["runner_start"])
+            alive = start is not None and process_identity(pid) == start
+            if not alive:
+                store.x("UPDATE jobs SET state='done', exit=-1, ended_at=? WHERE id=?", (store.now(), row["id"]))
+            report.append({"id": row["id"], "action": "alive" if alive else "interrupted", "pid": pid})
+    return report
 
 
 def jobs_finish(store: Store, job_id: str, exit_code: int) -> dict[str, Any]:

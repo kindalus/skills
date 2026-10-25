@@ -131,6 +131,15 @@ SCHEMA_V2 = """
 ALTER TABLE receipts ADD COLUMN receipted_by TEXT;
 """
 
+# Version 3: the identity of a running job's runner and of its command (PID and boot:start-time), so that
+# recovery closes a job only when neither is alive.
+SCHEMA_V3 = """
+ALTER TABLE jobs ADD COLUMN runner_pid INTEGER;
+ALTER TABLE jobs ADD COLUMN runner_start TEXT;
+ALTER TABLE jobs ADD COLUMN exec_pid INTEGER;
+ALTER TABLE jobs ADD COLUMN exec_start TEXT;
+"""
+
 # (version, statements); FTS is added with version 1 when the sqlite build has FTS5.
-STEPS = [(1, SCHEMA_V1), (2, SCHEMA_V2)]
+STEPS = [(1, SCHEMA_V1), (2, SCHEMA_V2), (3, SCHEMA_V3)]
 LATEST = STEPS[-1][0]
