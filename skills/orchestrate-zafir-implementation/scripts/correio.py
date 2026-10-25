@@ -233,6 +233,20 @@ def observe(root: pathlib.Path, state: dict[str, Any], agents: dict[str, dict[st
                         warned[key] = now()
                         system_mail(root, args.watch_to, "PEDIDO", f"swarm {status_path.parent.parent.name}: evento parado",
                                     f"{event.get('type')} para {event.get('to')} sem recibo há {int(age)} s: {event.get('path')}")
+    # Job queue (JSONL, one job per line with id/kind/who/state): a job that ends with a non-zero exit.
+    jobs_first = "jobsReported" not in state  # seed silently the first time this observer runs
+    reported = state.setdefault("jobsReported", {})
+    for queue in args.watch_jobs:
+        with contextlib.suppress(Exception):
+            for line in pathlib.Path(queue).read_text(encoding="utf-8").splitlines():
+                job = json.loads(line)
+                job_state = str(job.get("state", ""))
+                if job_state.startswith("done exit=") and job_state != "done exit=0" and job.get("id") not in reported:
+                    reported[job["id"]] = now()
+                    if jobs_first:
+                        continue  # do not replay history on the first cycle
+                    system_mail(root, args.watch_to, "PEDIDO", f"job {job['id']} falhou ({job.get('who')})",
+                                f"{job.get('kind')} de {job.get('who')} terminou com {job_state} às {job.get('endedAt')}: {str(job.get('cmd'))[:400]}")
     for spec in args.watch_ref:
         repo, _, ref = spec.partition(":")
         refs = state.setdefault("refs", {})
@@ -357,6 +371,7 @@ def main() -> None:
     p.add_argument("--watch-ref", action="append", default=[], help="REPO:REF whose advance is mailed (repeatable)")
     p.add_argument("--fetch-every", type=float, default=60.0)
     p.add_argument("--watch-runs", action="append", default=[], help="swarm runs/ directory to watch for stuck events")
+    p.add_argument("--watch-jobs", action="append", default=[], help="JSONL job queue whose failed jobs are mailed")
     p.set_defaults(func=cmd_daemon)
     args = parser.parse_args()
     os.umask(0o077)  # the mailbox is private to the owner
