@@ -303,7 +303,13 @@ def validate_send(space: dict[str, Any], members: dict[str, dict[str, Any]], env
 
 
 def check(space: dict[str, Any], message: dict[str, Any], db: Any) -> str | None:
-    """What makes a stored event invalid later: a grant edited after dispatch (2.7.0 pending rule)."""
+    """What makes a stored event invalid later (the 2.7.0 pending and receipt rules): its sender has moved to
+    another generation, or its grant was edited after dispatch."""
+    generation = message.get("from_generation")
+    if message["from_agent"] not in SYSTEM_SENDERS and generation is not None:
+        sender = db.member(space["id"], message["from_agent"])
+        if sender is not None and sender["generation"] != generation:
+            return "event sender generation is stale"
     if message["type"] == "TASK_ASSIGN":
         try:
             _check_grant(space, message["fields"])

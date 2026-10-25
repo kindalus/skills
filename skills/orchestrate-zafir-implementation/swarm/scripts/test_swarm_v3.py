@@ -241,6 +241,23 @@ class SwarmV3Test(unittest.TestCase):
         self.assertTrue(self.ev(root, launch, "t123-principal", "t123-reviewer", "REVIEW_REQUEST", {}, fields,
                                 generation=2))
 
+    def test_an_event_of_an_older_generation_can_be_rejected_but_not_accepted(self) -> None:
+        root, launch = self.init()
+        fields = {"taskId": "T01", "assignmentId": "a1", "revision": 1, "candidateSha": "a" * 40}
+        stale = self.ev(root, launch, "t123-principal", "t123-reviewer", "REVIEW_REQUEST", {}, fields)
+        library.bump_generation(self.store(), "t123", "t123-principal")
+        result = self.pending(root, launch, "t123-reviewer")
+        self.assertEqual(result["count"], 0)
+        self.assertEqual([(i["id"], i["error"]) for i in result["invalid"]],
+                         [(stale, "event sender generation is stale")])
+        with self.assertRaisesRegex(swarmctl.SwarmError, "generation is stale.*--reject"):
+            self.receipt(root, launch, stale, "t123-reviewer", True, "reviewing")
+        store = self.store()
+        self.assertIsNone(store.task("t123", "T01"))
+        self.assertIsNone(store.receipt(stale))
+        self.assertFalse(self.receipt(root, launch, stale, "t123-reviewer", False, "stale generation")["accepted"])
+        self.assertIsNone(self.store().task("t123", "T01"))
+
     def test_pending_events_are_first_in_first_out(self) -> None:
         root, launch = self.init()
         candidate = {"taskId": "T01", "assignmentId": "a1", "revision": 1, "candidateSha": "b" * 40}

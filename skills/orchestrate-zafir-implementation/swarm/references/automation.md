@@ -76,7 +76,7 @@ A new pane's shell is still initializing when `worktree create`, `worktree open`
 
 ## Events and receipts
 
-Events are correio messages of the run's space. The CLI stamps `sentAt` and `fields.runId`, threads each event by its task (`--task-id`) or else the slice, and validates it with `swarm/3.0.0`, the 2.7.0 rules carried over: run, route, the sender's current generation (`--generation` is required), event type, recipient, and the task/assignment/revision/candidate-SHA bindings each type needs. `TASK_ASSIGN` also requires `fields.grantPath` (absolute, under `runDir/reports`) with a matching `fields.grantSha256`; a grant edited after dispatch makes the event invalid, and its receipt can only reject it.
+Events are correio messages of the run's space. The CLI stamps `sentAt` and `fields.runId`, threads each event by its task (`--task-id`) or else the slice, and validates it with `swarm/3.0.0`, the 2.7.0 rules carried over: run, route, the sender's current generation (`--generation` is required), event type, recipient, and the task/assignment/revision/candidate-SHA bindings each type needs. `TASK_ASSIGN` also requires `fields.grantPath` (absolute, under `runDir/reports`) with a matching `fields.grantSha256`; a grant edited after dispatch, or a sender that has since moved to a newer generation, makes a pending event invalid, and its receipt can only reject it.
 
 ```bash
 correio send --space s430 --type REVIEW_REQUEST --from s430-principal --generation 1 --to s430-reviewer \
