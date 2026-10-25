@@ -361,6 +361,47 @@ class OrchestrationProtocolTest(CorreioCase):
         library.update_member(self.store, "orq", "sem-pane", pane_id=None)
         self.send(sender="sem-pane", to="orquestrador")  # outside Herdr nothing is checked
 
+    def stale_pane(self, registered: str, processes: dict, agents: list | None = None) -> None:
+        """preparador-15's case: started days ago, its env still says w24D:p1; Herdr renumbered it."""
+        library.add_member(self.store, "orq", "preparador-15", "preparer", pane_id=registered)
+        state, _log = self.fake_herdr_binary(agents or [])
+        state.write_text(json.dumps({"agents": agents or [], "processes": processes}))
+        os.environ["HERDR_PANE_ID"] = "w24D:p1"
+
+    def test_a_stale_pane_variable_is_settled_by_the_process_tree(self) -> None:
+        self.stale_pane("w24G:p2", {"w24G:p2": {"shell_pid": 999999, "foreground_process_group_id": os.getppid(),
+                                                 "foreground_processes": [{"name": "pi", "pid": os.getppid()}]}})
+        sent = self.send(sender="preparador-15", to="orquestrador")  # its agent process is our ancestor
+        os.environ["HERDR_PANE_ID"] = "p-orquestrador"
+        ask = self.send(sender="orquestrador", to="preparador-15")
+        os.environ["HERDR_PANE_ID"] = "w24D:p1"
+        library.receipt(self.store, message_id=ask["id"], agent="preparador-15", disposition="ok")
+        self.assertTrue(sent["id"])
+
+    def test_a_stale_pane_variable_is_refused_when_the_registered_pane_is_someone_else(self) -> None:
+        self.stale_pane("w24X:p9", {"w24X:p9": {"shell_pid": 999998, "foreground_process_group_id": 999997,
+                                                 "foreground_processes": [{"name": "pi", "pid": 999997}]}},
+                        [{"name": "preparador-15", "pane_id": "w24X:p9",
+                          "agent_session": {"kind": "file", "value": "/sessions/outra.jsonl"}}])
+        os.environ["PI_SESSION_FILE"] = "/sessions/minha.jsonl"
+        with self.assertRaisesRegex(CorreioError, "does not run in it.*ask the orchestrator.*member update"):
+            self.send(sender="preparador-15", to="orquestrador")
+
+    def test_a_missing_pane_without_a_session_proof_is_refused(self) -> None:
+        self.stale_pane("w24G:p2", {}, [{"name": "preparador-15", "pane_id": "w24G:p2"}])  # pane_not_found
+        with self.assertRaisesRegex(CorreioError, "does not run in it"):
+            self.send(sender="preparador-15", to="orquestrador")
+
+    def test_a_matching_session_proves_the_agent_when_its_processes_cannot_be_read(self) -> None:
+        session = "/home/k/.pi/agent/sessions/x/2026-10-22T20-56-30-035Z_01a16566.jsonl"
+        self.stale_pane("w24G:p2", {}, [{"name": "preparador-15", "pane_id": "w24G:p2",
+                                         "agent_session": {"kind": "file", "value": session}}])
+        os.environ["PI_SESSION_FILE"] = session
+        self.send(sender="preparador-15", to="orquestrador")
+        os.environ["PI_SESSION_FILE"] = session + ".other"
+        with self.assertRaisesRegex(CorreioError, "does not run in it"):
+            self.send(sender="preparador-15", to="orquestrador")
+
     def test_attachments_are_cited_by_path_and_hash(self) -> None:
         report = self.temp / "report.md"
         report.write_text("relatório\n")

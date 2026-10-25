@@ -27,6 +27,16 @@ elif args[:2] == ["agent", "prompt"]:
     print(json.dumps({"result": {}}))
 elif args[:2] == ["notification", "show"]:
     print(json.dumps({"result": {}}))
+elif args[:2] == ["pane", "process-info"]:
+    info = data.get("processes", {}).get(args[args.index("--pane") + 1])
+    if info is None:
+        print(json.dumps({"error": {"code": "pane_not_found"}}), file=sys.stderr); raise SystemExit(1)
+    print(json.dumps({"result": {"process_info": info}}))
+elif args[:2] == ["agent", "get"]:
+    found = [a for a in data["agents"] if a.get("name") == args[2]]
+    if not found:
+        print(json.dumps({"error": {"code": "agent_not_found"}}), file=sys.stderr); raise SystemExit(1)
+    print(json.dumps({"result": {"agent": found[0]}}))
 else:
     print("unsupported", file=sys.stderr); raise SystemExit(1)
 '''
@@ -80,6 +90,7 @@ class CorreioCase(unittest.TestCase):
         self.old_env = os.environ.copy()
         os.environ.pop("HERDR_PANE_ID", None)
         os.environ.pop("CORREIO_SPACE", None)
+        os.environ["CORREIO_HERDR"] = str(self.temp / "no-herdr")  # never the real Herdr; fake_herdr_binary sets one
         os.environ["CORREIO_DB"] = str(self.temp / "state" / "correio.db")
         self.clock = StepClock()
         self.store = Store(self.temp / "state" / "correio.db", clock=self.clock)
