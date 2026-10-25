@@ -1,0 +1,40 @@
+{
+  "assignmentId": "158faf5b-c96e-4c81-8a74-22ed4105fda3",
+  "candidateSha": "669a7d93735ecb520cda5a8acc3b39d1520f14c4",
+  "from": "s605-principal",
+  "fromGeneration": 1,
+  "id": "6cd79f34-4032-4577-a00a-c366c1f6869e",
+  "payload": {
+    "allowedPaths": [
+      "texto omitido",
+      "texto omitido",
+      "texto omitido"
+    ],
+    "authorizationEventId": "texto omitido",
+    "baseSha": "b82ddebe1f47971787f94d6e9ea29e2f8d1f0c4d",
+    "branch": "texto omitido",
+    "codeGateSha": "ada2ed9253a4c49715499d41dbdc66b4a0566e72",
+    "currentMainMerged": "d8b5da0365b21ea2f69ea31ebf3b602213e47d5e",
+    "deepReviewApprovalEventId": "texto omitido",
+    "docsOnly": true,
+    "evidencePath": "/fixture/fc713e968290",
+    "evidenceSha256": "19e7615e5a2a7732f319f0d33b82f60e226544b426e1ad803fc79ab32efb20ce",
+    "mergeRecordPath": "/fixture/16082bafc7db",
+    "mergeRecordSha256": "8c37e69b3e6b9665c6822fec79f316626469a2a023d899ae5f88310c39689ae0",
+    "noNewGateOrPG": true,
+    "openFindings": [],
+    "phase": 3,
+    "reportPath": "/fixture/46ec2341cc82",
+    "reportSha256": "0b07854a5d9e4569c3bee9ba5e5385536080d9ecce6225c7a854c8b3327d9955",
+    "result": "texto omitido",
+    "reviewKind": "texto omitido",
+    "scope": "phase3",
+    "worktree": "/fixture/89ed7e53c26a"
+  },
+  "revision": 1,
+  "runId": "253ea5ac-1daf-43ef-bce3-ba1ff96735f6",
+  "sentAt": "2026-10-24T21:18:38.348930+00:00",
+  "taskId": "S605-DOCS",
+  "to": "s605-reviewer",
+  "type": "REVIEW_REQUEST"
+}

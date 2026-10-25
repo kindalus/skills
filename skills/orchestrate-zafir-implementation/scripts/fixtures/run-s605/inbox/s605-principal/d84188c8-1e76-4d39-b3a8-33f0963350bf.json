@@ -1,0 +1,23 @@
+{
+  "assignmentId": "5ded2a98-f3eb-413b-a223-8c36b7f22223",
+  "candidateSha": "3bdbaec55a2c247175f707b4098f4a5cc8a0133c",
+  "from": "s605-principal",
+  "fromGeneration": 1,
+  "id": "d84188c8-1e76-4d39-b3a8-33f0963350bf",
+  "payload": {
+    "authorizationEventId": "texto omitido",
+    "baseSha": "3bdbaec55a2c247175f707b4098f4a5cc8a0133c",
+    "branch": "texto omitido",
+    "grantPath": "/fixture/95aaf0ad9a3b",
+    "grantSha256": "b511ab2d6fbd89ccd04e136509c42e6cdbdac5c10766423d447a5f838ce6a920",
+    "scope": "task",
+    "summary": "texto omitido",
+    "worktree": "/fixture/8f25e91979c3"
+  },
+  "revision": 1,
+  "runId": "253ea5ac-1daf-43ef-bce3-ba1ff96735f6",
+  "sentAt": "2026-10-24T19:26:59.370633+00:00",
+  "taskId": "S605-T07",
+  "to": "s605-principal",
+  "type": "TASK_ASSIGN"
+}

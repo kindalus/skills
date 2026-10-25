@@ -1,0 +1,52 @@
+{
+  "assignmentId": "343d83a5-41a0-4528-8207-1ed7ac1eff02",
+  "candidateSha": "b6f5a697d251d55817afddcdbea9cc904a406399",
+  "from": "s605-principal",
+  "fromGeneration": 1,
+  "id": "3c9aacd2-7c54-4dfc-bbb0-26e4f6638ea3",
+  "payload": {
+    "canonicalFilesEdited": false,
+    "forecastGrossTests": 2721,
+    "fullImporterComparison": {
+      "baseline": {
+        "fail": 5,
+        "pass": 1665,
+        "skip": 1029
+      },
+      "candidate": {
+        "fail": 10,
+        "pass": 1675,
+        "skip": 1034
+      },
+      "passToFail": 2
+    },
+    "nativeFocusedResult": {
+      "fail": 0,
+      "pass": 93,
+      "skip": 0
+    },
+    "noLeaseOrGate": true,
+    "proposalPatchPath": "/fixture/3c25efe4f6aa",
+    "proposalPatchSha256": "3bce303d2a08d1e75132edd20b1907852ab0098fff1047b607dab90416079824",
+    "reason": "texto omitido",
+    "recommendedDecision": "texto omitido",
+    "reportPath": "/fixture/a00281c03c0f",
+    "reportSha256": "086e86a09b91559c216c361453363dc0fd80e5076ab33fbd84a8213332fb816c",
+    "request": "texto omitido",
+    "requestedPaths": [
+      "texto omitido",
+      "texto omitido"
+    ],
+    "result": "texto omitido",
+    "reviewEventId": "texto omitido",
+    "scope": "test-consumer authorization",
+    "taskId": "S605-T03",
+    "testCeiling": 2850
+  },
+  "revision": 1,
+  "runId": "253ea5ac-1daf-43ef-bce3-ba1ff96735f6",
+  "sentAt": "2026-10-24T15:34:28.293777+00:00",
+  "taskId": "S605-T03",
+  "to": "orquestrador",
+  "type": "BLOCKED"
+}

@@ -1,0 +1,52 @@
+{
+  "assignmentId": "5ded2a98-f3eb-413b-a223-8c36b7f22223",
+  "candidateSha": "da09a45bfe460b324e93f80211aa45049eca0af7",
+  "from": "s605-principal",
+  "fromGeneration": 1,
+  "id": "79d466ee-5ead-4af9-b7ab-cbab3398603d",
+  "payload": {
+    "authorizationEventId": "texto omitido",
+    "baseSha": "3bdbaec55a2c247175f707b4098f4a5cc8a0133c",
+    "branch": "texto omitido",
+    "causalRedLogPath": "/fixture/a14542d4805b",
+    "ceilingUsage": {
+      "grossGo": 1000,
+      "grossTests": 2878,
+      "testR55Maximum": 2900
+    },
+    "grantPath": "/fixture/95aaf0ad9a3b",
+    "grantSha256": "b511ab2d6fbd89ccd04e136509c42e6cdbdac5c10766423d447a5f838ce6a920",
+    "guardProductionAndCP7Unchanged": true,
+    "mutantsKilled": 0,
+    "noLeaseOrFullGate": true,
+    "omissionProofPath": "/fixture/42697267f8bc",
+    "omissionProofSha256": "bb090cb7aa03eb392ece0e145821400935022adf62ca5f1921a1c9f7cd4ca2a5",
+    "onlyOneDebtLineRemoved": true,
+    "openFindings": [
+      "texto omitido"
+    ],
+    "ownCausalRed": true,
+    "redReportPath": "/fixture/5804a41d6c0d",
+    "reportPath": "/fixture/de301508dd44",
+    "reportSha256": "4d4d6c0c50b912a9e9e73d8ddb2b6b5b9645de4a7f67f893a75d5276a2863641",
+    "result": "texto omitido",
+    "scope": "task",
+    "tests": {
+      "actualFocusedFail": 0,
+      "actualFocusedGuardsPass": 2,
+      "actualFocusedSkip": 0,
+      "fullComplianceExitCode": 0,
+      "fullCompliancePackageSeconds": 242.387,
+      "jsonIntroducedErrors": 0,
+      "registryExplicitNoPGSkip": 2,
+      "registryPass": 39
+    },
+    "worktree": "/fixture/8f25e91979c3"
+  },
+  "revision": 1,
+  "runId": "253ea5ac-1daf-43ef-bce3-ba1ff96735f6",
+  "sentAt": "2026-10-24T19:40:00.033455+00:00",
+  "taskId": "S605-T07",
+  "to": "s605-reviewer",
+  "type": "REVIEW_REQUEST"
+}

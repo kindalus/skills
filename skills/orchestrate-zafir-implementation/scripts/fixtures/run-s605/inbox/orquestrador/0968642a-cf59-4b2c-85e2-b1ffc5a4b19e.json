@@ -1,0 +1,23 @@
+{
+  "from": "s605-principal",
+  "fromGeneration": 1,
+  "id": "0968642a-cf59-4b2c-85e2-b1ffc5a4b19e",
+  "payload": {
+    "finalRedWaiterRetained": true,
+    "newPaths": [
+      "texto omitido",
+      "texto omitido"
+    ],
+    "proposal": "texto omitido",
+    "reason": "texto omitido",
+    "reportPath": "/fixture/ceec0a54771b",
+    "reportSha256": "3db9a487a6598bc08c5f54d3ae8724bd041dcd51f051865156fac7d78766a321",
+    "request": "texto omitido",
+    "result": "texto omitido",
+    "totalCeilingIncrease": false
+  },
+  "runId": "253ea5ac-1daf-43ef-bce3-ba1ff96735f6",
+  "sentAt": "2026-10-24T13:39:50.930879+00:00",
+  "to": "orquestrador",
+  "type": "BLOCKED"
+}

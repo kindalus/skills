@@ -1,0 +1,18 @@
+{
+  "from": "s605-principal",
+  "fromGeneration": 1,
+  "id": "1e3b29cd-a006-4d67-8265-4024c4ae9245",
+  "payload": {
+    "coordinator": "texto omitido",
+    "expectedConfiguration": "texto omitido",
+    "generation": 1,
+    "instruction": "texto omitido",
+    "launchPath": "/fixture/1912ff8c951c",
+    "ponytailPath": null,
+    "rolePath": "/fixture/53f50de1516c"
+  },
+  "runId": "253ea5ac-1daf-43ef-bce3-ba1ff96735f6",
+  "sentAt": "2026-10-24T13:00:50.159288+00:00",
+  "to": "s605-reviewer",
+  "type": "BOOT"
+}

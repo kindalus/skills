@@ -1,0 +1,14 @@
+{
+  "from": "orquestrador",
+  "fromGeneration": 1,
+  "id": "553a53e5-3625-4d7e-beca-2e75b209e8e5",
+  "payload": {
+    "answersEventId": "texto omitido",
+    "decision": "texto omitido",
+    "next": "texto omitido"
+  },
+  "runId": "253ea5ac-1daf-43ef-bce3-ba1ff96735f6",
+  "sentAt": "2026-10-24T16:16:18.802014+00:00",
+  "to": "s605-principal",
+  "type": "RESUME"
+}

@@ -1,0 +1,20 @@
+{
+  "from": "s605-principal",
+  "fromGeneration": 1,
+  "id": "45706098-06bf-40da-9c33-269f42d787a9",
+  "payload": {
+    "folder": "/fixture/dfde2cc58a92",
+    "modelReplacement": false,
+    "paneId": "texto omitido",
+    "proposal": "texto omitido",
+    "reason": "texto omitido",
+    "reportPath": "/fixture/b3cc916e6b83",
+    "reportSha256": "123bd14824c343a78ba61068b442fa5754e46abb16abb8eab847970a056d5dfb",
+    "request": "texto omitido",
+    "result": "texto omitido"
+  },
+  "runId": "253ea5ac-1daf-43ef-bce3-ba1ff96735f6",
+  "sentAt": "2026-10-24T13:01:34.125655+00:00",
+  "to": "orquestrador",
+  "type": "BLOCKED"
+}

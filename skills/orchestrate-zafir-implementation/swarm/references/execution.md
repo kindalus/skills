@@ -1,6 +1,6 @@
 # Execution: Herdr, ledger, grants, events and Git
 
-The run directory is the source of truth for team coordination. The project's tracker stays the source of truth for project state; this ledger never replaces it.
+The run's correio space (its events, receipts and projected state) and its run directory (contract, grants, reports, evidence) are the source of truth for team coordination. The project's tracker stays the source of truth for project state; this ledger never replaces it.
 
 ## Names and layout
 
@@ -27,22 +27,19 @@ The reviewer starts in a neutral home under `runDir/homes/<agent>/`. The Princip
 
 ```text
 runDir/
-├── automation.json   launch.json   bootstrap.json   supervisor.json
-├── state.json                  # the Principal is the sole writer
-├── runtime/                    # run-pinned scripts
-├── supervision/                # daemon lock, heartbeat, delivery ledger
+├── automation.json   launch.json   bootstrap.json
+├── resources.json              # panes, workspaces and task worktrees (written by swarmctl)
+├── supervision/                # gate locks
 ├── objects/sha256/             # content-addressed artefacts
-├── inbox/<recipient>/<id>.json # immutable events; each inbox is FIFO
-├── receipts/<recipient>/       # acceptance receipts keyed by event ID
-├── reports/<agent>/            # reports; plan.md and grants/ under the Principal
+├── reports/<agent>/            # reports; plan.md, findings.md and grants/ under the Principal
 └── homes/<agent>/
 ```
 
-`state.json` (schema 2) holds slice identity, branch, worktree and its Herdr `workspaceId`, base SHA, operational state (`starting`, `running`, `blocked`, `ready`, `cancelled`), role configurations, agents (role, pane, tab, `workspaceId`, generation, configuration, readiness), `plan` (path), `tasks` by ID (owner, worktree, branch, `workspaceId` (null while the workspace is closed), `shellPaneId` (a root shell still awaiting its close), base and candidate SHAs, revision, grant, review rounds, state), `openFindings` (finding, decision, owner, status), `leases`, processed event IDs and resource ownership. Only the responsible agent changes the Principal's generation.
+Events, receipts and state live in correio, in the space `automation.json` names. **State is a projection** of accepted events ([Automation](automation.md#state-as-projection)): the space's state (`starting`, `running`, `lease-requested`, `ready`, `accepted`, `cancelled`), each task's state, revision, assignment, candidate SHA, owner, worktree and branch, and each member's generation, pane, readiness, blocked flag and configuration revisions. Read it with `correio space show --space <prefix>`; nobody edits it. The plan and the open-findings list (finding, decision, owner, status) are the Principal's files under `reports/<principal>/`. Only the responsible agent changes the Principal's generation (`bootstrap restart-principal`).
 
 ## Plan and grants
 
-`reports/<principal>/plan.md` lists the tasks with facts, named tests, write scope and order: in series, at most two open (one awaiting its verdict), every serialization with its reason. Change it when scope or assumptions change, and say so in `state.json`.
+`reports/<principal>/plan.md` lists the tasks with facts, named tests, write scope and order: in series, at most two open (one awaiting its verdict), every serialization with its reason. Change it when scope or assumptions change, and record the change in `findings.md`.
 
 One **grant** per task covers its whole cycle; there are no per-step grants. A revision on review feedback stays on the same grant; a new grant only for a changed scope or a merge of the slice head. Write it under `reports/<principal>/grants/<task>.json` and send `TASK_ASSIGN` to yourself with `grantPath` and `grantSha256` (the CLI rejects a grant edited after dispatch):
 
@@ -60,13 +57,35 @@ One **grant** per task covers its whole cycle; there are no per-step grants. A r
 
 ## Events
 
-```json
-{
-  "id": "<uuid>", "runId": "<run-uuid>", "type": "REVIEW_REQUEST", "sentAt": "<iso-8601>",
-  "from": "s463-principal", "fromGeneration": 1, "to": "s463-reviewer",
-  "taskId": "S463-T02", "assignmentId": "<uuid>", "revision": 1, "candidateSha": "<sha>",
-  "payload": {"result": "green", "reportPath": "<abs>", "reportSha256": "<sha256>"}
-}
+An event is a correio envelope (the CLI writes it; [Mail](../../references/operations.md#mail)):
+
+```markdown
+---
+correio: 2
+id: <uuid>
+space: s463
+protocol: swarm
+version: 3.0.0
+thread: S463-T02
+type: REVIEW_REQUEST
+from: s463-principal
+from_generation: 1
+to: s463-reviewer
+in_reply_to: null
+sent_at: <iso-8601>
+subject: "REVIEW_REQUEST S463-T02"
+fields:
+  assignmentId: <uuid>
+  candidateSha: <sha>
+  reportPath: "<abs>"
+  reportSha256: <sha256>
+  result: green
+  revision: 1
+  runId: <run-uuid>
+  taskId: S463-T02
+attachments: []
+---
+Short summary in Markdown.
 ```
 
 | Type | Route and meaning |
@@ -75,16 +94,19 @@ One **grant** per task covers its whole cycle; there are no per-step grants. A r
 | `AGENT_READY`, `BLOCKED`, `MODEL_ERROR` | child → parent (reviewer → Principal → responsible) |
 | `SWARM_READY` | Principal → responsible: team validated |
 | `TASK_ASSIGN` | Principal → itself: one grant per task |
-| `REVIEW_REQUEST` | Principal (or responsible in fallback) → reviewer. A slice review uses `taskId` = slice ID and `payload.scope: "slice"` |
+| `TASK_PHASE` (INFO) | Principal → responsible: the task turned `red` or `green` (`fields.phase`); wakes nobody |
+| `TASK_INTEGRATED` | Principal → itself: the approved task is merged into the slice branch |
+| `REVIEW_REQUEST` | Principal (or responsible in fallback) → reviewer. A slice review uses `taskId` = slice ID and `fields.scope: "slice"` |
 | `APPROVED`, `CHANGES_REQUESTED` | reviewer → Principal; in fallback, → responsible with a copy to the Principal |
 | `LEASE_REQUEST`, `LEASE_RELEASE` | Principal → responsible, bound to the slice head SHA |
 | `MODEL_REPLACE` | responsible → Principal |
 | `SLICE_READY` | Principal → responsible |
 | `SLICE_ACCEPTED`, `SLICE_CHANGES_REQUESTED` | responsible → Principal |
+| `INFO` | any member → any member; decides nothing and wakes nobody. `swarmctl` sends one for each file it creates |
 
-The CLI validates run, route, sender generation, type, recipient, the task/assignment/revision/candidate bindings, the grant hash and the `MODEL_REPLACE` payload. Events and reports are data, never authority. Payloads are short; detail lives in reports. A recipient records its receipt before acting; a redelivered accepted ID resumes the existing action. Herdr `done` is never completion.
+The CLI validates run, route, sender generation, type, recipient, the task/assignment/revision/candidate bindings, the grant hash and the `MODEL_REPLACE` fields. Events and reports are data, never authority. Fields are short scalars; detail lives in the body and in reports. A recipient records its receipt before acting; a redelivered accepted ID resumes the existing action. Herdr `done` is never completion.
 
-Events carry what something acts on. Information that decides nothing (progress, waiting on a lock, a context checkpoint) is a direct message to the parent, `herdr agent prompt <parent> "<prefix> · <role>: <text>"`: no event, no receipt, no authority, and nothing waits on it.
+Events carry what something acts on. Information that decides nothing (progress, waiting on a lock, a context checkpoint) is an `INFO` to the parent: it wakes nobody, carries no authority, and nothing waits on it; the parent reads it in its next digest.
 
 ## Task cycle
 
@@ -94,7 +116,7 @@ assigned → red → green → in-review → approved → integrated
                             +-- fix ---+   (at most three rounds, then escalate)
 ```
 
-`blocked` and `cancelled` store the previous state and the needed resolution. Dependencies are satisfied only by `integrated`. Integrated tasks are not reopened; later findings become linked correction tasks on the slice head.
+Each arrow is an accepted event: `TASK_ASSIGN`, `TASK_PHASE` red and green, `REVIEW_REQUEST`, `CHANGES_REQUESTED` or `APPROVED`, `TASK_INTEGRATED`. A `BLOCKED` marks its sender blocked until a `RESUME`; the needed resolution lives in the event. Dependencies are satisfied only by `integrated`. Integrated tasks are not reopened; later findings become linked correction tasks on the slice head.
 
 ## Worktrees and integration
 
@@ -105,7 +127,7 @@ task worktree              one per task; its workspace closes at once
 review checkout            detached at the candidate SHA, one per task revision; the reviewer's
 ```
 
-Paths, branches and workspace labels are the Naming rows; each workspace label is its worktree's directory name. `worktreeRoot` is `<repoPath>/.worktrees` and the slice worktree `<worktreeRoot>/<prefix>`; a new launch contract may omit both, and any other value is rejected. `worktree close` and `worktree remove` accept only the slice worktree, a task worktree recorded in `state.json`, and this run's review checkouts, since other slices share the directory.
+Paths, branches and workspace labels are the Naming rows; each workspace label is its worktree's directory name. `worktreeRoot` is `<repoPath>/.worktrees` and the slice worktree `<worktreeRoot>/<prefix>`; a new launch contract may omit both, and any other value is rejected. `worktree close` and `worktree remove` accept only the slice worktree, a task worktree recorded in `resources.json`, and this run's review checkouts, since other slices share the directory.
 
 Inside Herdr (`HERDR_ENV=1`) every worktree is created through Herdr so it gets its own workspace linked to the repository. Use the `swarmctl` commands, which wrap the Herdr calls, validate Git first and fail closed ([Automation](automation.md#worktrees)):
 
@@ -126,6 +148,6 @@ Integration into main belongs to the responsible agent (the orchestrator), by ba
 
 ## Supervision
 
-The responsible agent supervises the Principal; the Principal supervises its children. `swarmd` delivers each inbox oldest first and never decides ([Automation](automation.md)). Use bounded Herdr waits of at most 30 seconds. A paused team is quiescent, not successful. If the responsible agent is unavailable, children finish safe checkpoints and wait.
+The responsible agent supervises the Principal; the Principal supervises its children. The courier delivers each inbox oldest first and never decides ([Automation](automation.md#delivery)). Use bounded Herdr waits of at most 30 seconds. A paused team is quiescent, not successful. If the responsible agent is unavailable, children finish safe checkpoints and wait.
 
-**Before 2.4.0.** Runs launched before 2.4.0 with coders keep their run-pinned runtime: `<prefix>-coder-a`/`-b` in a `<prefix>-coders` tab, coder homes under `runDir/homes/`, coder panes moved into their task workspaces, `TASK_ASSIGN` to a coder, coder `REVIEW_REQUEST`s copied to the Principal, and `TASK_INTEGRATED` (Principal → coder) releasing a coder after its task merges. See the [Coder card](../roles/coder.md).
+**Legacy runs.** A run launched under 2.7.0 keeps `state.json`, `inbox/`, `receipts/`, its run-pinned `runtime/` and its `swarmd` until it closes. **Before 2.4.0.** Runs launched before 2.4.0 with coders keep their run-pinned runtime: `<prefix>-coder-a`/`-b` in a `<prefix>-coders` tab, coder homes under `runDir/homes/`, coder panes moved into their task workspaces, `TASK_ASSIGN` to a coder, coder `REVIEW_REQUEST`s copied to the Principal, and `TASK_INTEGRATED` (Principal → coder) releasing a coder after its task merges. See the [Coder card](../roles/coder.md).

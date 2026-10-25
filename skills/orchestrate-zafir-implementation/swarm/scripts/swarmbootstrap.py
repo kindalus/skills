@@ -13,9 +13,9 @@ import sys
 from typing import Any
 
 from swarmcore import (
-    SHA_RE, VERSION, SwarmError, canonical, coder_names, herdr, init_run, load_json, load_launch, model_args,
-    now, principal_name as principal_of, receipt_event, require_beneath, reviewer_name, roster, run,
-    send_event, validate_event, validate_new_launch, write_json_mutable,
+    AUTOMATION_V3, SHA_RE, VERSION, SwarmError, canonical, coder_names, correio_modules, events_for, herdr,
+    init_run, is_v3, ledger_path, load_json, load_launch, model_args, now, principal_name as principal_of,
+    reviewer_name, roster, run, run_marker, validate_new_launch, write_json_mutable,
 )
 
 def git_worktrees(repo: pathlib.Path) -> dict[pathlib.Path, dict[str, str]]:
@@ -224,21 +224,37 @@ def validate_responsible_resource(launch: dict[str, Any]) -> None:
 
 
 def recover_boot_event(root: pathlib.Path, launch: dict[str, Any], sender: str,
-                       recipient: str, expected_configuration: str) -> pathlib.Path | None:
-    matches: list[pathlib.Path] = []
-    for path in sorted((root / "inbox" / recipient).glob("*.json")):
-        try:
-            event = validate_event(load_json(path), launch, path, root)
-        except SwarmError:
-            continue
-        payload = event["payload"]
-        if (event["type"] == "BOOT" and event["from"] == sender
-                and payload.get("generation") == 1
-                and payload.get("expectedConfiguration") == expected_configuration):
-            matches.append(path)
+                       recipient: str, expected_configuration: str) -> str | None:
+    """The generation-1 BOOT already published for ``recipient`` (a file path in 2.7.0, a message id in 3.0.0)."""
+    matches = [ref for ref, event in events_for(root, launch).find("BOOT", sender, recipient)
+               if event["payload"].get("generation") == 1
+               and event["payload"].get("expectedConfiguration") == expected_configuration]
     if len(matches) > 1:
         raise SwarmError(f"multiple recoverable BOOT events for {recipient}")
     return matches[0] if matches else None
+
+
+def correio_member(root: pathlib.Path, agent: str, **cols: Any) -> None:
+    """3.0.0: keep the agent's member row (pane, workspace, generation) in step with Herdr."""
+    if not is_v3(root):
+        return
+    marker = run_marker(root)
+    library, store_module = correio_modules(marker["correio"].get("scripts"))
+    store = store_module.Store(marker["correio"]["db"])
+    try:
+        library.update_member(store, marker["correio"]["space"], agent, **cols)
+    except Exception as exc:
+        raise SwarmError(f"correio: {exc}") from exc
+    finally:
+        store.close()
+
+
+def boot_prompt(root: pathlib.Path, ref: str, tail: str) -> str:
+    if is_v3(root):
+        cli = f"python3 {run_marker(root)['correio']['scripts']}/correio.py"
+        return (f"Read and receipt BOOT {ref}: {cli} show {ref}, then {cli} receipt --agent <you> --id {ref} "
+                f"--disposition '<what you do>'. Send events with {cli} send (swarm/3.0.0). {tail}")
+    return f"Read and receipt BOOT {ref}. {tail}"
 
 
 def bootstrap_journal(root: pathlib.Path, launch: dict[str, Any]) -> dict[str, Any]:
@@ -248,8 +264,8 @@ def bootstrap_journal(root: pathlib.Path, launch: dict[str, Any]) -> dict[str, A
         if value.get("runId") != launch["runId"]:
             raise SwarmError("bootstrap journal runId mismatch")
         return value
-    value = {"schemaVersion": 1, "automationVersion": VERSION, "runId": launch["runId"],
-             "responsible": {}, "principal": {}, "updatedAt": now()}
+    value = {"schemaVersion": 1, "automationVersion": AUTOMATION_V3 if is_v3(root) else VERSION,
+             "runId": launch["runId"], "responsible": {}, "principal": {}, "updatedAt": now()}
     write_json_mutable(path, value)
     return value
 
@@ -312,15 +328,19 @@ def bootstrap_responsible(contract_path: pathlib.Path, run_dir: pathlib.Path, *,
                                    principalWorkspaceId=workspace_id,
                                    principalGeneration=generation, principalStarted=True)
     save_bootstrap(root, journal)
-    supervisor = load_json(root / "supervisor.json")
-    supervisor["principal"] = {"agent": principal_name, "paneId": pane_id, "generation": generation}
-    supervisor["updatedAt"] = now()
-    write_json_mutable(root / "supervisor.json", supervisor)
-    boot_path = pathlib.Path(journal["responsible"].get("bootEventPath", ""))
-    if not boot_path.is_file():
-        boot_path = recover_boot_event(root, launch, launch["responsible"]["agent"], principal_name,
-                                       launch["models"]["principal"]) or pathlib.Path()
-    if not boot_path.is_file():
+    events = events_for(root, launch)
+    if events.version == AUTOMATION_V3:
+        correio_member(root, principal_name, pane_id=pane_id, workspace_id=workspace_id)
+    else:
+        supervisor = load_json(root / "supervisor.json")
+        supervisor["principal"] = {"agent": principal_name, "paneId": pane_id, "generation": generation}
+        supervisor["updatedAt"] = now()
+        write_json_mutable(root / "supervisor.json", supervisor)
+    boot_ref = journal["responsible"].get(events.journal_key, "")
+    if not events.exists(boot_ref):
+        boot_ref = recover_boot_event(root, launch, launch["responsible"]["agent"], principal_name,
+                                      launch["models"]["principal"]) or ""
+    if not events.exists(boot_ref):
         payload = {
             "rolePath": str(canonical(launch["skillRoot"]) / "roles" / "principal.md"),
             "launchPath": str(root / "launch.json"), "generation": 1,
@@ -328,21 +348,22 @@ def bootstrap_responsible(contract_path: pathlib.Path, run_dir: pathlib.Path, *,
             "instruction": "Read rolePath and launchPath only; load references on demand. Validate identity/runtime, "
                            "emit AGENT_READY, then wait for Responsible validation before child bootstrap.",
         }
-        boot_path = send_event(root, launch, sender=launch["responsible"]["agent"], generation=1,
-                               recipient=principal_name, event_type="BOOT", payload=payload)
-        journal["responsible"]["bootEventPath"] = str(boot_path)
+        boot_ref = events.send(sender=launch["responsible"]["agent"], generation=1, recipient=principal_name,
+                               event_type="BOOT", payload=payload)
+        journal["responsible"][events.journal_key] = boot_ref
         save_bootstrap(root, journal)
     agent = named_agents().get(principal_name)
     if agent and agent.get("agent_status") in {"idle", "done"}:
-        herdr("agent", "prompt", principal_name,
-              f"Read and receipt BOOT {boot_path}. Use {root / 'runtime/swarmctl.py'} for events. "
-              "Emit AGENT_READY with native runtime evidence; do not create children before Responsible RESUME.")
+        tools = ("" if events.version == AUTOMATION_V3 else f"Use {root / 'runtime/swarmctl.py'} for events. ")
+        herdr("agent", "prompt", principal_name, boot_prompt(
+            root, boot_ref, tools + "Emit AGENT_READY with native runtime evidence; do not create children before "
+                                    "Responsible RESUME."))
     supervisor_result = None
-    if not no_supervisor:
+    if not no_supervisor and events.version != AUTOMATION_V3:
         supervisor_result = start_supervisor(root)
     return {"dryRun": False, "init": init, "worktree": worktree, "principal": {
         "name": principal_name, "paneId": pane_id, "tabId": tab_id, "workspaceId": workspace_id,
-        "bootEventPath": str(boot_path)},
+        events.journal_key: boot_ref},
         "supervisor": supervisor_result}
 
 
@@ -374,10 +395,19 @@ def create_initial_state(launch: dict[str, Any], principal: dict[str, Any]) -> d
     }
 
 
-def validate_principal_authorization(root: pathlib.Path, launch: dict[str, Any], path: pathlib.Path) -> dict[str, Any]:
-    event_path = require_beneath(path, root / "inbox" / principal_of(launch),
-                                 allow_root=False, label="authorization event")
-    event = validate_event(load_json(event_path), launch, event_path, root)
+def create_resource_ledger(launch: dict[str, Any], principal: dict[str, Any]) -> dict[str, Any]:
+    """3.0.0: panes, workspaces and task worktrees only; agent, task and slice state are correio projections."""
+    agents: dict[str, Any] = {principal_of(launch): {
+        "role": "principal", "paneId": principal["paneId"], "tabId": principal["tabId"],
+        "workspaceId": principal["workspaceId"]}}
+    for name, role in [(reviewer_name(launch), "reviewer"), *((n, "coder") for n in coder_names(launch))]:
+        agents[name] = {"role": role, "paneId": None, "tabId": None, "workspaceId": None}
+    return {"schemaVersion": 1, "automationVersion": AUTOMATION_V3, "runId": launch["runId"],
+            "prefix": launch["prefix"], "agents": agents, "tasks": {}, "resourceOwnership": {}, "updatedAt": now()}
+
+
+def validate_principal_authorization(root: pathlib.Path, launch: dict[str, Any], path: Any) -> dict[str, Any]:
+    event = events_for(root, launch).get(str(path), principal_of(launch))
     if event["type"] != "RESUME" or event["from"] != launch["responsible"]["agent"]:
         raise SwarmError("child bootstrap requires Responsible RESUME")
     if event["payload"].get("bootstrapChildrenAuthorized") is not True:
@@ -475,7 +505,18 @@ def _create_child_layout(root: pathlib.Path, launch: dict[str, Any], journal: di
 
 def _load_or_create_state(root: pathlib.Path, launch: dict[str, Any],
                           principal: dict[str, Any]) -> dict[str, Any]:
-    state_path = root / "state.json"
+    state_path = ledger_path(root)
+    if is_v3(root):
+        if state_path.exists():
+            state = load_json(state_path)
+            expected_agents = {principal_of(launch), reviewer_name(launch), *coder_names(launch)}
+            if (state.get("runId") != launch["runId"] or state.get("automationVersion") != AUTOMATION_V3
+                    or set(state.get("agents", {})) != expected_agents):
+                raise SwarmError("cannot adopt unknown or incomplete resource ledger")
+            return state
+        state = create_resource_ledger(launch, principal)
+        write_json_mutable(state_path, state)
+        return state
     if state_path.exists():
         state = load_json(state_path)
         required_state = {"runId", "schemaVersion", "agents", "tasks", "openFindings",
@@ -495,39 +536,44 @@ def _boot_and_start_children(root: pathlib.Path, launch: dict[str, Any], journal
                              section: str, layout: dict[str, dict[str, str]], sender: str,
                              sender_generation: int, state: dict[str, Any]) -> dict[str, Any]:
     """Record panes in state, reserve every BOOT serially, then start the children concurrently."""
-    state_path = root / "state.json"
+    state_path = ledger_path(root)
+    events = events_for(root, launch)
     for name, resource in layout.items():
         state["agents"][name].update(paneId=resource["paneId"], tabId=resource["tabId"],
                                      workspaceId=resource["workspaceId"])
         state["resourceOwnership"][resource["paneId"]] = name
+        correio_member(root, name, pane_id=resource["paneId"], workspace_id=resource["workspaceId"])
     state["updatedAt"] = now()
     write_json_mutable(state_path, state)
     live = named_agents()
+
+    def configuration(name: str) -> str:
+        if events.version == AUTOMATION_V3:
+            return launch["models"]["reviewer" if name == reviewer_name(launch) else "coders"]
+        return state["agents"][name]["configuration"]
+
     # The threads below never write shared state or the bootstrap journal.
     boot_events = journal[section].setdefault("bootEvents", {})
     for name in sorted(layout):
-        event_path = pathlib.Path(boot_events.get(name, ""))
-        if event_path.is_file():
+        if events.exists(boot_events.get(name, "")):
             continue
         role = "reviewer" if name == reviewer_name(launch) else "coder"
-        event_path = recover_boot_event(root, launch, sender, name,
-                                        state["agents"][name]["configuration"]) or pathlib.Path()
-        if event_path.is_file():
-            boot_events[name] = str(event_path)
+        ref = recover_boot_event(root, launch, sender, name, configuration(name)) or ""
+        if events.exists(ref):
+            boot_events[name] = ref
             save_bootstrap(root, journal)
             continue
         payload = {
             "rolePath": str(canonical(launch["skillRoot"]) / "roles" / f"{role}.md"),
             "launchPath": str(root / "launch.json"), "generation": 1, "coordinator": sender,
-            "expectedConfiguration": state["agents"][name]["configuration"],
+            "expectedConfiguration": configuration(name),
             "ponytailPath": launch["ponytailPath"] if role == "coder" else None,
             "instruction": "Read rolePath and launchPath only; load references on demand. Validate runtime and "
                            "emit AGENT_READY. No productive work until a TASK_ASSIGN (coder) or a "
                            "REVIEW_REQUEST (reviewer).",
         }
-        event_path = send_event(root, launch, sender=sender, generation=sender_generation, recipient=name,
-                                event_type="BOOT", payload=payload)
-        boot_events[name] = str(event_path)
+        boot_events[name] = events.send(sender=sender, generation=sender_generation, recipient=name,
+                                        event_type="BOOT", payload=payload)
         save_bootstrap(root, journal)
 
     def start_child(name: str, resource: dict[str, str]) -> tuple[str, dict[str, Any]]:
@@ -539,14 +585,12 @@ def _boot_and_start_children(root: pathlib.Path, launch: dict[str, Any], journal
             key = "reviewer" if name == reviewer_name(launch) else "coders"
             harness, args = model_args(launch["models"][key])
             result = start_agent(name, harness, resource["paneId"], args)
-        event_path = pathlib.Path(boot_events[name])
+        ref = boot_events[name]
         if result.get("agent_status") in {"idle", "done"}:
-            herdr("agent", "prompt", name,
-                  f"Read and receipt BOOT {event_path}. Read rolePath and launch contract, verify native runtime "
-                  "evidence, "
-                  f"then emit AGENT_READY to {sender}; no productive work.")
-        return name, {"paneId": resource["paneId"], "bootEventPath": str(event_path),
-                      "status": result.get("agent_status")}
+            herdr("agent", "prompt", name, boot_prompt(
+                root, ref, "Read rolePath and launch contract, verify native runtime evidence, "
+                           f"then emit AGENT_READY to {sender}; no productive work."))
+        return name, {"paneId": resource["paneId"], events.journal_key: ref, "status": result.get("agent_status")}
 
     started: dict[str, Any] = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
@@ -569,7 +613,7 @@ def bootstrap_principal(run_dir: pathlib.Path, authorization: pathlib.Path) -> d
     root, launch = load_launch(run_dir)
     auth = validate_principal_authorization(root, launch, authorization)
     principal_name = principal_of(launch)
-    receipt_event(root, launch, authorization, principal_name, True, "Child bootstrap authorized")
+    events_for(root, launch).receipt(str(authorization), principal_name, True, "Child bootstrap authorized")
     agents = named_agents()
     principal = agents.get(principal_name)
     if not principal:
@@ -583,10 +627,11 @@ def bootstrap_principal(run_dir: pathlib.Path, authorization: pathlib.Path) -> d
     state = _load_or_create_state(root, launch, {"paneId": principal["pane_id"], "tabId": principal["tab_id"],
                                                  "workspaceId": principal["workspace_id"],
                                                  "generation": generation})
-    generation = state["agents"][principal_name]["generation"]
-    supervisor = load_json(root / "supervisor.json")
-    supervisor.update(principalValidated=True, principalValidationEvent=auth["id"], updatedAt=now())
-    write_json_mutable(root / "supervisor.json", supervisor)
+    if not is_v3(root):
+        generation = state["agents"][principal_name]["generation"]
+        supervisor = load_json(root / "supervisor.json")
+        supervisor.update(principalValidated=True, principalValidationEvent=auth["id"], updatedAt=now())
+        write_json_mutable(root / "supervisor.json", supervisor)
     layout = _create_child_layout(root, launch, journal, principal)
     started = _boot_and_start_children(root, launch, journal, "principal", layout, principal_name,
                                        generation, state)
@@ -627,19 +672,31 @@ def rotate_principal(run_dir: pathlib.Path, reason: str) -> dict[str, Any]:
         raise SwarmError("recorded Principal pane is absent")
     if canonical(panes[0].get("cwd", "/")) != canonical(launch["slice"]["worktree"]):
         raise SwarmError("recorded Principal pane has unexpected cwd")
-    state_path = root / "state.json"
-    if state_path.exists():
-        state = load_json(state_path)
-        entry = state.get("agents", {}).get(principal_name)
-        if not isinstance(entry, dict) or entry.get("generation") not in {generation - 1, generation}:
-            raise SwarmError("state Principal generation does not match the restart")
-        entry.update(generation=generation, ready=False)
-        state["updatedAt"] = now()
-        write_json_mutable(state_path, state)
-    supervisor = load_json(root / "supervisor.json")
-    supervisor["principal"] = {"agent": principal_name, "paneId": pane_id, "generation": generation}
-    supervisor["updatedAt"] = now()
-    write_json_mutable(root / "supervisor.json", supervisor)
+    events = events_for(root, launch)
+    state_path = ledger_path(root)
+    if events.version == AUTOMATION_V3:
+        marker = run_marker(root)
+        library, store_module = correio_modules(marker["correio"].get("scripts"))
+        store = store_module.Store(marker["correio"]["db"])
+        try:
+            library.bump_generation(store, marker["correio"]["space"], principal_name, to=generation)
+        except Exception as exc:
+            raise SwarmError(f"correio: {exc}") from exc
+        finally:
+            store.close()
+    else:
+        if state_path.exists():
+            state = load_json(state_path)
+            entry = state.get("agents", {}).get(principal_name)
+            if not isinstance(entry, dict) or entry.get("generation") not in {generation - 1, generation}:
+                raise SwarmError("state Principal generation does not match the restart")
+            entry.update(generation=generation, ready=False)
+            state["updatedAt"] = now()
+            write_json_mutable(state_path, state)
+        supervisor = load_json(root / "supervisor.json")
+        supervisor["principal"] = {"agent": principal_name, "paneId": pane_id, "generation": generation}
+        supervisor["updatedAt"] = now()
+        write_json_mutable(root / "supervisor.json", supervisor)
     record["principalGeneration"] = generation
     save_bootstrap(root, journal)
     if principal_name in live:
@@ -650,31 +707,41 @@ def rotate_principal(run_dir: pathlib.Path, reason: str) -> dict[str, Any]:
         harness, args = model_args(launch["models"]["principal"])
         agent = start_agent(principal_name, harness, pane_id, args)
     herdr("pane", "rename", pane_id, pane_title(launch, "principal"))
-    boot_path = pathlib.Path(rotation.get("bootEventPath", ""))
-    if not boot_path.is_file():
-        payload = {
+    key = events.journal_key
+    boot_ref = rotation.get(key, "")
+    if not events.exists(boot_ref):
+        payload: dict[str, Any] = {
             "rolePath": str(canonical(launch["skillRoot"]) / "roles" / "principal.md"),
             "launchPath": str(root / "launch.json"), "generation": generation,
             "expectedConfiguration": launch["models"]["principal"], "ponytailPath": launch["ponytailPath"],
-            "rotation": {"reason": rotation["reason"], "previousGeneration": generation - 1,
-                         "statePath": str(state_path), "reportsPath": str(root / "reports")},
-            "instruction": "Restarted session: read rolePath and launchPath, then resume from statePath, the plan "
-                           "and the reports on disk. Emit AGENT_READY and wait for Responsible RESUME before acting.",
         }
-        boot_path = send_event(root, launch, sender=launch["responsible"]["agent"], generation=1,
-                               recipient=principal_name, event_type="BOOT", payload=payload)
-        rotation["bootEventPath"] = str(boot_path)
+        if events.version == AUTOMATION_V3:
+            payload.update(rotationReason=rotation["reason"], previousGeneration=generation - 1,
+                           reportsPath=str(root / "reports"),
+                           instruction="Restarted session: read rolePath and launchPath, then resume from the "
+                                       "space's projections (correio space show), the plan and the reports on disk. "
+                                       "Emit AGENT_READY and wait for Responsible RESUME before acting.")
+        else:
+            payload.update(rotation={"reason": rotation["reason"], "previousGeneration": generation - 1,
+                                     "statePath": str(state_path), "reportsPath": str(root / "reports")},
+                           instruction="Restarted session: read rolePath and launchPath, then resume from statePath, "
+                                       "the plan and the reports on disk. Emit AGENT_READY and wait for Responsible "
+                                       "RESUME before acting.")
+        boot_ref = events.send(sender=launch["responsible"]["agent"], generation=1, recipient=principal_name,
+                               event_type="BOOT", payload=payload)
+        rotation[key] = boot_ref
         save_bootstrap(root, journal)
     if agent.get("agent_status") in {"idle", "done"}:
-        herdr("agent", "prompt", principal_name,
-              f"Read and receipt BOOT {boot_path}. Use {root / 'runtime/swarmctl.py'} for events. "
-              f"Emit AGENT_READY as generation {generation}; act only after Responsible RESUME.")
+        tools = "" if events.version == AUTOMATION_V3 else f"Use {root / 'runtime/swarmctl.py'} for events. "
+        herdr("agent", "prompt", principal_name, boot_prompt(
+            root, boot_ref, tools + f"Emit AGENT_READY as generation {generation}; act only after Responsible RESUME."))
+    if events.version == AUTOMATION_V3:
+        correio_member(root, principal_name, pane_id=agent.get("pane_id") or pane_id)
     rotation["completed"] = True
     record.setdefault("rotations", []).append({k: rotation[k] for k in (
-        "generation", "previousGeneration", "reason", "startedAt", "bootEventPath")})
+        "generation", "previousGeneration", "reason", "startedAt", key)})
     save_bootstrap(root, journal)
-    return {"principal": principal_name, "paneId": pane_id, "generation": generation,
-            "bootEventPath": str(boot_path)}
+    return {"principal": principal_name, "paneId": pane_id, "generation": generation, key: boot_ref}
 
 
 TASK_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,30}$")
@@ -711,7 +778,7 @@ def is_review_checkout(launch: dict[str, Any], path: pathlib.Path) -> bool:
 
 def is_task_checkout(root: pathlib.Path, path: pathlib.Path) -> bool:
     """A task worktree this run recorded in ``state.json``; the flat namespace is shared, so the name alone proves nothing."""
-    state_path = root / "state.json"
+    state_path = ledger_path(root)
     tasks = load_json(state_path).get("tasks", {}) if state_path.is_file() else {}
     return any(task.get("worktree") == str(path) for task in tasks.values())
 
@@ -768,9 +835,9 @@ def task_worktree(root: pathlib.Path, launch: dict[str, Any], task_id: str, name
         raise SwarmError(f"task owner is not an implementer of this run: {owner}")
     if not SHA_RE.fullmatch(base):
         raise SwarmError("task base must be a full lowercase Git SHA")
-    state_path = root / "state.json"
+    state_path = ledger_path(root)
     if not state_path.is_file():
-        raise SwarmError("state.json is missing: run bootstrap principal first")
+        raise SwarmError(f"{state_path.name} is missing: run bootstrap principal first")
     state = load_json(state_path)
     _require_principal_pane(state, launch)
     path = task_worktree_path(launch, name)
@@ -792,6 +859,7 @@ def task_worktree(root: pathlib.Path, launch: dict[str, Any], task_id: str, name
     if not own_task:
         journal = bootstrap_journal(root, launch)
         placed = _move_into(state, journal, owner, worktree)
+        correio_member(root, owner, pane_id=placed["paneId"], workspace_id=placed["workspaceId"])
         _forget_closed_workspaces(state)
         save_bootstrap(root, journal)
         shell = task.get("shellPaneId")
@@ -831,7 +899,7 @@ def close_worktree(root: pathlib.Path, launch: dict[str, Any], path_value: pathl
         raise SwarmError("only this run's task or review checkouts can be closed")
     if path not in git_worktrees(repo):
         raise SwarmError(f"not a registered worktree: {path}")
-    state_path = root / "state.json"
+    state_path = ledger_path(root)
     state = load_json(state_path) if state_path.is_file() else None
     tasks = [t for t in (state or {}).get("tasks", {}).values() if t.get("worktree") == str(path)]
     if tasks:

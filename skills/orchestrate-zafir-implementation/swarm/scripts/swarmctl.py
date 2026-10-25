@@ -19,9 +19,9 @@ from swarmbootstrap import (
     review_worktree, rotate_principal, task_worktree,
 )
 from swarmcore import (
-    EVENT_TYPES, SwarmError, artifact_put, gate_reserve, gate_run, herdr, init_run, load_json,
-    load_launch, parse_model_triple, pending_events, receipt_event, send_event,
-    sha256_file, snapshot_create, snapshot_verify, validate_new_launch, validate_launch, canonical, run, VERSION,
+    AUTOMATION_V3, EVENT_TYPES, V3_EVENT_TYPES, SwarmError, artifact_put, events_for, gate_reserve, gate_run, herdr,
+    init_run, load_json, load_launch, parse_model_triple, pending_events, receipt_event, send_event, sha256_file,
+    snapshot_create, snapshot_verify, validate_new_launch, validate_launch, canonical, run, VERSION,
 )
 
 def cmd_doctor(args: argparse.Namespace) -> dict[str, Any]:
@@ -128,8 +128,12 @@ def build_parser() -> argparse.ArgumentParser:
     send.add_argument("--from", dest="sender", required=True)
     send.add_argument("--generation", type=int, required=True)
     send.add_argument("--to", required=True)
-    send.add_argument("--type", required=True, choices=sorted(EVENT_TYPES))
+    send.add_argument("--type", required=True, choices=sorted(V3_EVENT_TYPES))
     send.add_argument("--payload-file", type=pathlib.Path)
+    send.add_argument("--subject", help="3.0.0 runs: one-line subject (default: type and task)")
+    send.add_argument("--body-file", type=pathlib.Path, help="3.0.0 runs: Markdown body")
+    send.add_argument("--thread", help="3.0.0 runs: thread key (default: the task ID, else the slice ID)")
+    send.add_argument("--attach", action="append", default=[], help="3.0.0 runs: file cited by path and sha256")
     send.add_argument("--id")
     send.add_argument("--task-id")
     send.add_argument("--assignment-id")
@@ -137,7 +141,7 @@ def build_parser() -> argparse.ArgumentParser:
     send.add_argument("--candidate-sha")
     receipt = event_sub.add_parser("receipt")
     receipt.add_argument("--run-dir", type=pathlib.Path, required=True)
-    receipt.add_argument("--event", type=pathlib.Path, required=True)
+    receipt.add_argument("--event", required=True, help="event file (2.7.0) or message id (3.0.0)")
     receipt.add_argument("--recipient", required=True)
     receipt.add_argument("--reject", action="store_true")
     receipt.add_argument("--disposition", required=True)
@@ -188,31 +192,58 @@ def dispatch(args: argparse.Namespace) -> tuple[Any, int]:
             return rotate_principal(args.run_dir, args.reason), 0
         return bootstrap_principal(args.run_dir, args.authorization_event), 0
     root, launch = load_launch(args.run_dir)
+    events = events_for(root, launch)
+
+    def recorded(result: dict[str, Any], kind: str, subject: str, attachments: list[Any] = (),
+                 **fields: Any) -> dict[str, Any]:
+        """3.0.0: an INFO to the responsible agent cites what this command created, by path and sha256."""
+        if events.version == AUTOMATION_V3:
+            info = events.info(kind=kind, subject=subject, attachments=[str(a) for a in attachments],
+                               fields={k: v for k, v in fields.items() if v is not None})
+            result = {**result, "info": info}
+        return result
+
     if args.command == "worktree":
         if args.worktree_command == "task":
-            return task_worktree(root, launch, args.task_id, args.name, args.owner, args.base), 0
+            result = task_worktree(root, launch, args.task_id, args.name, args.owner, args.base)
+            return recorded(result, "worktree", f"task worktree {args.task_id}", taskId=args.task_id,
+                            path=result["worktree"]["path"], branch=result["worktree"]["branch"],
+                            head=result["worktree"]["head"]), 0
         if args.worktree_command == "review":
-            return review_worktree(root, launch, args.task_id, args.revision, args.candidate_sha), 0
+            result = review_worktree(root, launch, args.task_id, args.revision, args.candidate_sha)
+            return recorded(result, "worktree", f"review checkout {args.task_id} r{args.revision}",
+                            taskId=args.task_id, revision=args.revision, candidateSha=args.candidate_sha,
+                            path=result["path"]), 0
         if args.worktree_command == "close":
             return close_worktree(root, launch, args.path), 0
         return remove_worktree(root, launch, args.path, args.merged_into), 0
     if args.command == "event":
         if args.event_command == "pending":
-            return pending_events(root, launch, args.recipient), 0
+            return events.pending(args.recipient), 0
         if args.event_command == "receipt":
-            path = receipt_event(root, launch, args.event, args.recipient, not args.reject, args.disposition)
-            return {"receiptPath": str(path), "sha256": sha256_file(path)}, 0
+            return events.receipt(args.event, args.recipient, not args.reject, args.disposition), 0
         payload = load_json(args.payload_file) if args.payload_file else {}
         fields = {k: v for k, v in {
             "taskId": args.task_id, "assignmentId": args.assignment_id,
             "revision": args.revision, "candidateSha": args.candidate_sha,
         }.items() if v is not None}
-        path = send_event(root, launch, sender=args.sender, generation=args.generation,
-                          recipient=args.to, event_type=args.type, payload=payload,
-                          event_id=args.id, fields=fields)
-        return {"eventPath": str(path), "sha256": sha256_file(path)}, 0
+        if events.version != AUTOMATION_V3:
+            if args.type not in EVENT_TYPES:
+                raise SwarmError(f"unknown event type: {args.type}")
+            if args.subject or args.body_file or args.thread or args.attach:
+                raise SwarmError("--subject, --body-file, --thread and --attach need a 3.0.0 run")
+            ref = events.send(sender=args.sender, generation=args.generation, recipient=args.to,
+                              event_type=args.type, payload=payload, event_id=args.id, fields=fields)
+            return {"eventPath": ref, "sha256": sha256_file(ref)}, 0
+        body = args.body_file.read_text(encoding="utf-8") if args.body_file else None
+        ref = events.send(sender=args.sender, generation=args.generation, recipient=args.to, event_type=args.type,
+                          payload=payload, event_id=args.id, fields=fields, subject=args.subject, body=body,
+                          thread=args.thread, attachments=args.attach)
+        return {"id": ref, "sha256": events.store.message(ref)["sha256"], "space": events.space}, 0
     if args.command == "artifact":
-        return artifact_put(root, launch, args.file), 0
+        result = artifact_put(root, launch, args.file)
+        return recorded(result, "artifact", f"artifact {pathlib.Path(args.file).name}", [result["path"]],
+                        source=str(canonical(args.file))), 0
     if args.command == "snapshot":
         if args.snapshot_command == "verify":
             result = snapshot_verify(root, launch, args.snapshot)
@@ -221,19 +252,23 @@ def dispatch(args: argparse.Namespace) -> tuple[Any, int]:
         if not isinstance(paths, list) or any(not isinstance(x, str) for x in paths):
             raise SwarmError("paths-file must contain a string array")
         value = snapshot_create(root, launch, args.root, paths, args.output)
-        return {"snapshotPath": str(args.output), "files": len(value["files"]),
-                "sha256": sha256_file(args.output)}, 0
+        result = {"snapshotPath": str(args.output), "files": len(value["files"]), "sha256": sha256_file(args.output)}
+        return recorded(result, "snapshot", f"snapshot {pathlib.Path(args.output).name}", [args.output]), 0
     if args.command == "gate":
         if args.gate_command == "run":
             code = gate_run(root, launch, args.contract)
-            return {"gateExit": code, "contract": str(args.contract)}, code
+            contract = load_json(args.contract)
+            result = {"gateExit": code, "contract": str(args.contract)}
+            return recorded(result, "gate", f"gate {contract['id']} exit {code}",
+                            [args.contract, contract["logPath"], contract["exitPath"]], gateId=contract["id"],
+                            exit=code), code
         argv = load_json(args.argv_file)
         if not isinstance(argv, list):
             raise SwarmError("argv-file must contain an array")
         value = gate_reserve(root, launch, args.cwd, argv, args.unset_env, args.log,
                              args.exit_path, args.output)
-        return {"contractPath": str(args.output), "id": value["id"],
-                "sha256": sha256_file(args.output)}, 0
+        result = {"contractPath": str(args.output), "id": value["id"], "sha256": sha256_file(args.output)}
+        return recorded(result, "gate", f"gate {value['id']} reserved", [args.output], gateId=value["id"]), 0
     raise SwarmError("unsupported command")
 
 

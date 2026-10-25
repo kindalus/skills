@@ -16,11 +16,14 @@ import pathlib
 import re
 import stat
 import subprocess
+import sys
 import tempfile
 import uuid
 from typing import Any, Iterable
 
-VERSION = "2.7.0"
+VERSION = "2.7.0"  # the file-event automation, kept for legacy runs and rollback
+AUTOMATION_V3 = "3.0.0"  # events in correio (protocol swarm/3.0.0)
+AUTOMATIONS = {VERSION, AUTOMATION_V3}
 # Every worktree lives at <repoPath>/.worktrees/<name> (references/naming.md of the skill).
 WORKTREES_DIR = ".worktrees"
 AGENT_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
@@ -336,6 +339,8 @@ def validate_new_launch(value: Any, expected_run_dir: pathlib.Path | None = None
 def validate_launch(value: Any, expected_run_dir: pathlib.Path | None = None) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise SwarmError("launch contract must be an object")
+    if value.get("automation", AUTOMATION_V3) not in AUTOMATIONS:
+        raise SwarmError(f"automation must be one of {sorted(AUTOMATIONS)}")
     required = {"runId", "prefix", "sliceId", "specPath", "repoPath", "baseSha", "slice",
                 "responsible", "worktreeRoot", "runDir", "skillRoot", "ponytailPath",
                 "models", "processPaths"}
@@ -417,6 +422,11 @@ def load_launch(run_dir: os.PathLike[str] | str) -> tuple[pathlib.Path, dict[str
     marker = load_json(marker_path)
     launch_path = root / "launch.json"
     launch = validate_launch(load_json(launch_path), root)
+    if marker.get("automationVersion") == AUTOMATION_V3:
+        if marker.get("schemaVersion") != 1 or marker.get("runId") != launch["runId"] or not isinstance(
+                marker.get("correio"), dict):
+            raise SwarmError("automation ownership marker mismatch")
+        return root, launch
     if (marker.get("schemaVersion") != 1 or marker.get("runId") != launch["runId"]
             or marker.get("automationVersion") != VERSION):
         raise SwarmError("automation ownership marker mismatch")
@@ -692,6 +702,8 @@ def init_run(contract_path: pathlib.Path, requested_run_dir: pathlib.Path) -> di
         raise SwarmError(f"run directory path is not a directory: {root}")
     if root.exists() and any(root.iterdir()) and not (root / "automation.json").is_file():
         raise SwarmError("refusing to migrate a nonempty run not owned by this control plane")
+    if contract.get("automation", AUTOMATION_V3) == AUTOMATION_V3:
+        return init_run_v3(contract, root)
     ensure_private_dir(root)
     marker = {"schemaVersion": 1, "automationVersion": VERSION, "runId": contract["runId"]}
     write_json_immutable(root / "automation.json", marker, same_ok=True)
@@ -873,3 +885,245 @@ def gate_run(root: pathlib.Path, launch: dict[str, Any], contract_path: pathlib.
             raise
 
 
+
+
+# -- automation 3.0.0: events in correio ---------------------------------------------------------------------------
+# A 3.0.0 run keeps its files (launch.json, reports/, objects/, homes/, bootstrap.json and the resource ledger
+# resources.json), but its events, receipts and state live in correio.db under protocol swarm/3.0.0. Nothing is
+# copied into runtime/: the space's pinned protocol version is the run's pin.
+BINDING_KEYS = ("taskId", "assignmentId", "revision", "candidateSha")
+V3_EVENT_TYPES = EVENT_TYPES | {"TASK_PHASE", "INFO"}
+
+
+def correio_scripts() -> pathlib.Path:
+    explicit = os.environ.get("CORREIO_SCRIPTS")
+    return pathlib.Path(explicit) if explicit else pathlib.Path(__file__).resolve().parents[2] / "scripts"
+
+
+def correio_modules(scripts: os.PathLike[str] | str | None = None) -> tuple[Any, Any]:
+    path = str(pathlib.Path(scripts) if scripts else correio_scripts())
+    if path not in sys.path:
+        sys.path.insert(0, path)
+    from correio import library, store  # noqa: PLC0415 - only 3.0.0 runs need correio
+    return library, store
+
+
+def run_marker(root: pathlib.Path) -> dict[str, Any]:
+    return load_json(root / "automation.json")
+
+
+def is_v3(root: pathlib.Path) -> bool:
+    path = root / "automation.json"
+    return path.is_file() and load_json(path).get("automationVersion") == AUTOMATION_V3
+
+
+def ledger_path(root: pathlib.Path) -> pathlib.Path:
+    """The run's resource ledger: state.json for 2.7.0, resources.json for 3.0.0 (state is a correio projection)."""
+    return root / ("resources.json" if is_v3(root) else "state.json")
+
+
+def _open_store(marker: dict[str, Any]) -> Any:
+    _library, store = correio_modules(marker["correio"].get("scripts"))
+    return store.Store(marker["correio"]["db"])
+
+
+def init_run_v3(contract: dict[str, Any], root: pathlib.Path) -> dict[str, Any]:
+    library, store_module = correio_modules()
+    ensure_private_dir(root)
+    marker_path = root / "automation.json"
+    if marker_path.is_file():
+        marker = load_json(marker_path)
+        if marker.get("automationVersion") != AUTOMATION_V3 or marker.get("runId") != contract["runId"]:
+            raise SwarmError("automation ownership marker mismatch")
+    else:
+        db_path = store_module.default_db_path()
+        probe = store_module.Store(db_path)
+        try:
+            space_id = contract["prefix"]
+            taken = probe.space(space_id)
+            if taken and (taken["contract"] or {}).get("runId") != contract["runId"]:
+                space_id = f"{contract['prefix']}-{contract['runId'][:8]}"
+        finally:
+            probe.close()
+        marker = {"schemaVersion": 1, "automationVersion": AUTOMATION_V3, "runId": contract["runId"],
+                  "correio": {"db": str(db_path), "space": space_id, "protocol": "swarm", "version": AUTOMATION_V3,
+                              "scripts": str(correio_scripts())}}
+        write_json_immutable(marker_path, marker, same_ok=True)
+    for relative in ("reports", "homes", "objects/sha256", "supervision"):
+        path = root / relative
+        path.mkdir(parents=True, exist_ok=True)
+        os.chmod(path, 0o700)
+    for agent in allowed_agents(contract):
+        (root / "reports" / agent).mkdir(mode=0o700, exist_ok=True)
+        if agent not in {contract["responsible"]["agent"], principal_name(contract)}:
+            (root / "homes" / agent).mkdir(mode=0o700, exist_ok=True)
+    write_json_immutable(root / "launch.json", contract, same_ok=True)
+    store = _open_store(marker)
+    space_id = marker["correio"]["space"]
+    try:
+        library.create_space(store, space_id=space_id, kind="swarm", protocol="swarm", version=AUTOMATION_V3,
+                             slice_id=contract["sliceId"], prefix=contract["prefix"], run_dir=str(root),
+                             repo_path=contract["repoPath"], base_sha=contract["baseSha"],
+                             spec_path=contract["specPath"], contract=contract)
+        responsible = contract["responsible"]
+        library.add_member(store, space_id, responsible["agent"], "responsible", pane_id=responsible["paneId"],
+                           workspace_id=responsible["workspaceId"])
+        roles = [(principal_name(contract), "principal", "principal"), (reviewer_name(contract), "reviewer", "reviewer")]
+        roles += [(name, "coder", "coders") for name in coder_names(contract)]
+        for name, role, key in roles:
+            library.add_member(store, space_id, name, role,
+                               configuration={"value": contract["models"][key], "revision": 1, "history": []})
+    except Exception as exc:
+        raise SwarmError(f"correio: {exc}") from exc
+    finally:
+        store.close()
+    return {"runDir": str(root), "launchSha256": sha256_file(root / "launch.json"),
+            "automationVersion": AUTOMATION_V3, "space": space_id, "db": marker["correio"]["db"]}
+
+
+def _split_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    """Scalar payload values become fields; structured ones go, with the whole payload, into the body."""
+    fields, structured = {}, False
+    for key, value in payload.items():
+        if value is None or isinstance(value, (bool, str)) or (isinstance(value, int) and abs(value) < 10 ** 18):
+            fields[key] = value
+        else:
+            structured = True
+    body = ("```json\n" + json.dumps(payload, indent=1, sort_keys=True, ensure_ascii=False) + "\n```\n"
+            if structured else "")
+    return fields, body
+
+
+class FileEvents:
+    """2.7.0: immutable event files under inbox/ and receipts/."""
+    version = VERSION
+    journal_key = "bootEventPath"
+
+    def __init__(self, root: pathlib.Path, launch: dict[str, Any]):
+        self.root, self.launch = root, launch
+
+    def send(self, *, sender: str, generation: int, recipient: str, event_type: str, payload: dict[str, Any],
+             event_id: str | None = None, fields: dict[str, Any] | None = None, **_extra: Any) -> str:
+        return str(send_event(self.root, self.launch, sender=sender, generation=generation, recipient=recipient,
+                              event_type=event_type, payload=payload, event_id=event_id, fields=fields))
+
+    def exists(self, ref: str | None) -> bool:
+        return bool(ref) and pathlib.Path(ref).is_file()
+
+    def get(self, ref: str, recipient: str) -> dict[str, Any]:
+        path = require_beneath(ref, self.root / "inbox" / recipient, allow_root=False, label="event")
+        return validate_event(load_json(path), self.launch, path, self.root)
+
+    def find(self, event_type: str, sender: str, recipient: str) -> list[tuple[str, dict[str, Any]]]:
+        found = []
+        for path in sorted((self.root / "inbox" / recipient).glob("*.json")):
+            try:
+                event = validate_event(load_json(path), self.launch, path, self.root)
+            except SwarmError:
+                continue
+            if event["type"] == event_type and event["from"] == sender:
+                found.append((str(path), event))
+        return found
+
+    def receipt(self, ref: str, recipient: str, accepted: bool, disposition: str) -> dict[str, Any]:
+        path = receipt_event(self.root, self.launch, pathlib.Path(ref), recipient, accepted, disposition)
+        return {"receiptPath": str(path), "sha256": sha256_file(path)}
+
+    def pending(self, recipient: str | None = None) -> dict[str, Any]:
+        return pending_events(self.root, self.launch, recipient)
+
+    def info(self, **_kwargs: Any) -> None:
+        return None
+
+
+class CorreioEvents:
+    """3.0.0: events are correio messages of the run's space (protocol swarm/3.0.0)."""
+    version = AUTOMATION_V3
+    journal_key = "bootEventId"
+
+    def __init__(self, root: pathlib.Path, launch: dict[str, Any]):
+        self.root, self.launch = root, launch
+        self.marker = run_marker(root)
+        self.space = self.marker["correio"]["space"]
+        self.library, _store = correio_modules(self.marker["correio"].get("scripts"))
+        self.store = _open_store(self.marker)
+
+    def _call(self, fn: Any, *args: Any, **kwargs: Any) -> Any:
+        try:
+            return fn(*args, **kwargs)
+        except Exception as exc:  # correio refusals become SwarmError for the CLI
+            if isinstance(exc, SwarmError):
+                raise
+            raise SwarmError(str(exc)) from exc
+
+    def send(self, *, sender: str, generation: int, recipient: str, event_type: str, payload: dict[str, Any],
+             event_id: str | None = None, fields: dict[str, Any] | None = None, subject: str | None = None,
+             body: str | None = None, thread: str | None = None, attachments: Iterable[str] = ()) -> str:
+        payload_fields, payload_body = _split_payload(payload or {})
+        result = self._call(self.library.send, self.store, space=self.space, sender=sender, to=recipient,
+                            type=event_type, thread=thread, subject=subject,
+                            body=(body or "") + payload_body, fields={**payload_fields, **(fields or {})},
+                            attachments=list(attachments), generation=generation, message_id=event_id)
+        return result["id"]
+
+    def exists(self, ref: str | None) -> bool:
+        return bool(ref) and self.store.message(self.ref(ref)) is not None
+
+    @staticmethod
+    def ref(value: Any) -> str:
+        """A message id; a 2.7-style path ending in <id>.json also names it."""
+        text = str(value)
+        return pathlib.Path(text).stem if text.endswith(".json") else text
+
+    def event(self, message: dict[str, Any]) -> dict[str, Any]:
+        fields = dict(message["fields"])
+        bound = {key: fields.pop(key) for key in BINDING_KEYS if key in fields}
+        fields.pop("runId", None)
+        return {"id": message["id"], "runId": self.launch["runId"], "type": message["type"],
+                "from": message["from_agent"], "fromGeneration": message["from_generation"],
+                "to": message["to_agent"], "sentAt": message["sent_at"], **bound, "payload": fields}
+
+    def get(self, ref: str, recipient: str) -> dict[str, Any]:
+        message = self.store.message(self.ref(ref))
+        if message is None or message["space_id"] != self.space or message["to_agent"] != recipient:
+            raise SwarmError(f"no event {ref} for {recipient} in this run")
+        return self.event(message)
+
+    def find(self, event_type: str, sender: str, recipient: str) -> list[tuple[str, dict[str, Any]]]:
+        return [(m["id"], self.event(m)) for m in self.store.find_messages(
+            self.space, type=event_type, from_agent=sender, to_agent=recipient)]
+
+    def receipt(self, ref: str, recipient: str, accepted: bool, disposition: str) -> dict[str, Any]:
+        result = self._call(self.library.receipt, self.store, message_id=self.ref(ref), agent=recipient,
+                            accepted=accepted, disposition=disposition)
+        return {"receipt": result["message_id"], "accepted": result["accepted"], "idempotent": result["idempotent"],
+                "messageSha256": result["message_sha256"]}
+
+    def pending(self, recipient: str | None = None) -> dict[str, Any]:
+        result = self._call(self.library.inbox, self.store, agent=recipient, space=self.space)
+        pending = [{"id": m["id"], "type": m["type"], "from": m["from"], "to": m["to"], "path": None,
+                    "sha256": m["sha256"], "sentAt": m["sentAt"]} for m in result["pending"]]
+        pending.sort(key=lambda item: (item["to"], item["sentAt"]))
+        invalid = [{"id": m["id"], "path": None, "error": m["error"]} for m in result["invalid"]]
+        return {"pending": pending, "info": result["info"], "invalid": invalid, "count": len(pending)}
+
+    def info(self, *, kind: str, subject: str, fields: dict[str, Any] | None = None,
+             attachments: Iterable[str] = ()) -> str | None:
+        """Best effort INFO to the responsible agent for a file swarmctl created; never fails the command."""
+        members = self.store.members(self.space)
+        pane = os.environ.get("HERDR_PANE_ID")
+        sender = next((name for name, m in members.items() if pane and m.get("pane_id") == pane), None)
+        try:
+            result = self.library.send(
+                self.store, space=self.space, sender=sender or "swarmctl", to=self.launch["responsible"]["agent"],
+                type="INFO", subject=subject[:300], fields={"kind": kind, **(fields or {})},
+                attachments=list(attachments), generation=members[sender]["generation"] if sender else None,
+                system=sender is None)
+            return result["id"]
+        except Exception as exc:  # noqa: BLE001 - recording is additional to the file operation
+            print(json.dumps({"warning": f"INFO not recorded: {exc}"}), file=sys.stderr)
+            return None
+
+
+def events_for(root: pathlib.Path, launch: dict[str, Any]) -> FileEvents | CorreioEvents:
+    return CorreioEvents(root, launch) if is_v3(root) else FileEvents(root, launch)

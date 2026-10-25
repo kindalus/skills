@@ -1,0 +1,21 @@
+{
+  "from": "s605-principal",
+  "fromGeneration": 1,
+  "id": "a769fa82-9348-4951-a8bb-b305b5f9ea32",
+  "payload": {
+    "agents": {
+      "s605-principal": "texto omitido",
+      "s605-reviewer": "texto omitido"
+    },
+    "baseSha": "0ed85f68cfa53468a01e75102e24db827deab0c1",
+    "branch": "texto omitido",
+    "next": "texto omitido",
+    "reportPath": "/fixture/a656d38d18b6",
+    "reportSha256": "4d5d59699d0d3cd9ddf7e9e03c2a9106b949401df3e5f2bf95fb07e2302b473f",
+    "result": "texto omitido"
+  },
+  "runId": "253ea5ac-1daf-43ef-bce3-ba1ff96735f6",
+  "sentAt": "2026-10-24T13:03:24.169316+00:00",
+  "to": "orquestrador",
+  "type": "SWARM_READY"
+}

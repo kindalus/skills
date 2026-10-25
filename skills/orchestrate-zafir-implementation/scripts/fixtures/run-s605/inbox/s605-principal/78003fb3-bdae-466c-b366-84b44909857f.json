@@ -1,0 +1,18 @@
+{
+  "from": "orquestrador",
+  "fromGeneration": 1,
+  "id": "78003fb3-bdae-466c-b366-84b44909857f",
+  "payload": {
+    "gate": "texto omitido",
+    "logPath": "/fixture/83a650193568",
+    "logSha256": "43d2351619f49382b6687784e460bcb6707179387704f1ff003f408d2417e813",
+    "next": "texto omitido",
+    "result": "texto omitido",
+    "sha": "ada2ed9253a4c49715499d41dbdc66b4a0566e72",
+    "stages": "texto omitido"
+  },
+  "runId": "253ea5ac-1daf-43ef-bce3-ba1ff96735f6",
+  "sentAt": "2026-10-24T20:58:26.882521+00:00",
+  "to": "s605-principal",
+  "type": "RESUME"
+}

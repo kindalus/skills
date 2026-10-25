@@ -29,8 +29,8 @@ Clear with `herdr agent prompt <name> "<command>" --wait --timeout 300000`. A ne
 ```
 
 1. **Enqueue** a request only when it is [ready](#requests); an incomplete one goes back to its preparer.
-2. **Grant** in queue order. Clear the consultant's context, confirm its name, set the holder row, retitle its pane with the slice ([Naming](../references/naming.md#applying-it)), and tell the preparer which consultants it holds. Every grant starts from a clean context.
-3. **Release.** The preparer releases each consultant to the orchestrator individually, with the answer's sha256. Set the row to `FREE`, retitle the pane free, mark the item served, log it, and grant the next item.
+2. **Grant** in queue order. Clear the consultant's context, confirm its name, set the holder row, mark the grant on its member (`correio member update --agent <consultant> --grant "<slice> <round>"`), retitle its pane with the slice ([Naming](../references/naming.md#applying-it)), and tell the preparer by mail which consultants it holds. Every grant starts from a clean context.
+3. **Release.** The preparer releases each consultant to the orchestrator individually, by mail with the answer's sha256. Set the row to `FREE`, clear the member's grant (`--clear-grant`), retitle the pane free, mark the item served, log it, and grant the next item.
 
 **Families.** The final pre-mortem is always by a consultant from a family other than the preparer's, with a clean context. A bug review is by a family other than the executor's.
 
@@ -51,4 +51,4 @@ You are a consultant: you answer one request, then stop.
 - Verify each input's sha256 against the request before relying on it.
 - Ground every claim in a file and line, or in a command you ran. Read through graft or `rg -n` plus a line range.
 - Answer in the request's format, as public text in your reply.
-- When the answer is complete, mail the orchestrator one line, `correio.py send --from <your agent name> --to orquestrador --type ENTREGA --subject "<slice> <round>: resposta pronta" --body "<verdict in one line>"`. The answer itself stays in your reply: the orchestrator recovers it from your transcript.
+- When the answer is complete, mail the orchestrator one line in the slice's thread: `python3 <skill>/scripts/correio.py send --thread <slice> --type ENTREGA --from <your agent name> --to orquestrador --subject "<slice> <round>: resposta pronta" --body "<verdict in one line>"`. The answer itself stays in your reply: the orchestrator recovers it from your transcript.

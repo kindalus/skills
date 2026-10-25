@@ -1,0 +1,43 @@
+{
+  "assignmentId": "359f055a-4659-436f-9967-957d7aaa820a",
+  "candidateSha": "35f99058f5bc8c453eea4761a363ee6dc678d85a",
+  "from": "s605-principal",
+  "fromGeneration": 1,
+  "id": "be795143-b823-4b56-a6d4-b11838092033",
+  "payload": {
+    "branch": "texto omitido",
+    "nativeCheckpointPath": "/fixture/8532022e0054",
+    "nativeRunner": {
+      "completionNotifierSession": 22493,
+      "holderPidObserved": 3503032,
+      "logPath": "/fixture/c7c789909455",
+      "makePid": 3593158,
+      "sessionId": 89008,
+      "timeoutSeconds": 3600,
+      "waiterPid": 3593186
+    },
+    "noLeaseOrGate": true,
+    "pendingNativeEvidence": true,
+    "reason": "texto omitido",
+    "reportPath": "/fixture/c2692b8611b2",
+    "reportSha256": "44834c081e20c0e332167990c1d5f9fea63f4b05ef7b740d822fe27da0b2545b",
+    "request": "texto omitido",
+    "result": "texto omitido",
+    "resumeAction": "texto omitido",
+    "scope": "infrastructure-only",
+    "uncommittedDerivedTests": true,
+    "wholeCost": {
+      "go": 1000,
+      "goCeiling": 1605,
+      "testCeiling": 2850,
+      "tests": 2803
+    },
+    "worktree": "/fixture/2942f753acec"
+  },
+  "revision": 1,
+  "runId": "253ea5ac-1daf-43ef-bce3-ba1ff96735f6",
+  "sentAt": "2026-10-24T17:59:35.632671+00:00",
+  "taskId": "S605-T05",
+  "to": "orquestrador",
+  "type": "BLOCKED"
+}

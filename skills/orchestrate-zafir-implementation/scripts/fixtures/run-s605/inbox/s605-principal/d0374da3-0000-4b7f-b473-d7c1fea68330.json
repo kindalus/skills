@@ -1,0 +1,18 @@
+{
+  "assignmentId": "046ccb1a-a6df-43a8-820d-ad43325ae096",
+  "candidateSha": "45322adeedc80910e5fbf06fbe9c96fa90f978d8",
+  "from": "s605-principal",
+  "fromGeneration": 1,
+  "id": "d0374da3-0000-4b7f-b473-d7c1fea68330",
+  "payload": {
+    "grantPath": "/fixture/1431c88b0a04",
+    "grantSha256": "aa94fdeda477dba07703cdd6212ddfab203da96dc64682e1d931f074ad9ed642",
+    "summary": "texto omitido"
+  },
+  "revision": 1,
+  "runId": "253ea5ac-1daf-43ef-bce3-ba1ff96735f6",
+  "sentAt": "2026-10-24T16:34:36.805505+00:00",
+  "taskId": "S605-T04",
+  "to": "s605-principal",
+  "type": "TASK_ASSIGN"
+}

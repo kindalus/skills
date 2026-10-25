@@ -1,0 +1,69 @@
+{
+  "candidateSha": "ada2ed9253a4c49715499d41dbdc66b4a0566e72",
+  "from": "s605-principal",
+  "fromGeneration": 1,
+  "id": "d8a000b9-d479-44d9-8c31-7afde7b46bcc",
+  "payload": {
+    "advisoryNotes": 6,
+    "baseSha": "0ed85f68cfa53468a01e75102e24db827deab0c1",
+    "branch": "texto omitido",
+    "candidateClean": true,
+    "ceilingUsage": {
+      "grossGo": 1000,
+      "grossTests": 2878,
+      "testMaximum": 2900
+    },
+    "currentMainMerged": "022dae11dc66cc2b30cdae90b05b37a79aa50db6",
+    "deepReviewApprovalEventId": "texto omitido",
+    "deepReviewReportPath": "/fixture/a1886c729d28",
+    "deepReviewReportSha256": "1931b6f08c9225a82b65a4eb2f6e2c669ae5df9dd4830dac9439cdbb336d68b2",
+    "fullCompliance": {
+      "candidateSha": "ada2ed9253a4c49715499d41dbdc66b4a0566e72",
+      "exitCode": 0,
+      "fullGate": false,
+      "logPath": "/fixture/444c79cdddda",
+      "noLease": true,
+      "packageSeconds": 177.038,
+      "sessionId": 94534,
+      "sha256": "db67e15bf646d31f182287fd1ca941561f39e5e9b64bd32bde59480754b16a6c",
+      "singleFlockTimeout": 3600
+    },
+    "gateContract": {
+      "authorizationEventId": "texto omitido",
+      "codeConflict": "texto omitido",
+      "command": [
+        "texto omitido",
+        "texto omitido"
+      ],
+      "mergeCurrentMain": true,
+      "mergeStrategy": "texto omitido",
+      "onGreen": "texto omitido",
+      "owner": "texto omitido",
+      "principalWorktreeFrozen": true,
+      "recordProtectedResourcesBeforeAfter": true
+    },
+    "preflight": {
+      "gofmt": {
+        "exitCode": 0,
+        "path": "/fixture/a8976100b5bc",
+        "sha256": "cd372fb85148700fa88095e3492d3f9f5beb43e555e5ff26d95f5a6adc36f8e6"
+      },
+      "vet": {
+        "exitCode": 0,
+        "path": "/fixture/8f946b881fa0",
+        "sha256": "65e5d6e3029923b15b5c1bf2dedb2ed6ccba468085f5bc9ca81e659b2db909c7"
+      }
+    },
+    "reportPath": "/fixture/ed0f7570621d",
+    "reportSha256": "4a0ac3346ddcb4939334850262623948301e771737ff1dabce7f7a0d3b6380f6",
+    "request": "texto omitido",
+    "requiredReviewFindings": 0,
+    "scope": "slice",
+    "taskApprovalCount": 7,
+    "worktree": "/fixture/89ed7e53c26a"
+  },
+  "runId": "253ea5ac-1daf-43ef-bce3-ba1ff96735f6",
+  "sentAt": "2026-10-24T20:15:43.024211+00:00",
+  "to": "orquestrador",
+  "type": "LEASE_REQUEST"
+}

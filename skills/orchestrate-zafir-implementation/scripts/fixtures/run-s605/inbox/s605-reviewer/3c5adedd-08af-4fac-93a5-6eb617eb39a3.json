@@ -1,0 +1,52 @@
+{
+  "assignmentId": "343d83a5-41a0-4528-8207-1ed7ac1eff02",
+  "candidateSha": "b6f5a697d251d55817afddcdbea9cc904a406399",
+  "from": "s605-principal",
+  "fromGeneration": 1,
+  "id": "3c5adedd-08af-4fac-93a5-6eb617eb39a3",
+  "payload": {
+    "baseSha": "19fee393d45d940916c0dfc086e02e86f623b822",
+    "branch": "texto omitido",
+    "ceilingUsage": {
+      "goCeiling": 1605,
+      "grossGo": 637,
+      "grossTests": 2684,
+      "testCeiling": 2850
+    },
+    "grantPath": "/fixture/67cebe30d8e2",
+    "grantSha256": "2e12cc088ee78651c8bf39ed4b1e4e6ad4053021e666fcf6922652533901e1b5",
+    "mutantsKilled": 38,
+    "omissionProofPath": "/fixture/b7721acb8750",
+    "openFindings": [
+      "texto omitido",
+      "texto omitido"
+    ],
+    "redReportPath": "/fixture/5804a41d6c0d",
+    "reportPath": "/fixture/3d846d305232",
+    "reportSha256": "c46328d403887acd1e3c0fc1fd67397d98bfbec9c5b6fcb3b75232e094ba4783",
+    "result": "texto omitido",
+    "scope": "task",
+    "subceilingTransfers": [
+      "texto omitido"
+    ],
+    "tests": {
+      "memoryPass": 33,
+      "nativeFailed": 0,
+      "nativePass": 93,
+      "nativeSkipped": 0,
+      "portPass": 5,
+      "postNativeMemoryPass": 33,
+      "supplementWithoutPG": {
+        "explicitNativeSkip": 13,
+        "pass": 59
+      }
+    },
+    "worktree": "/fixture/333ae3a1389e"
+  },
+  "revision": 1,
+  "runId": "253ea5ac-1daf-43ef-bce3-ba1ff96735f6",
+  "sentAt": "2026-10-24T15:17:36.873797+00:00",
+  "taskId": "S605-T03",
+  "to": "s605-reviewer",
+  "type": "REVIEW_REQUEST"
+}

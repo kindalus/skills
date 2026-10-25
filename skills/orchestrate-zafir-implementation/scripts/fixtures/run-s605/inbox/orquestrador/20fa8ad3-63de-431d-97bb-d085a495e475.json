@@ -1,0 +1,205 @@
+{
+  "candidateSha": "669a7d93735ecb520cda5a8acc3b39d1520f14c4",
+  "from": "s605-principal",
+  "fromGeneration": 1,
+  "id": "20fa8ad3-63de-431d-97bb-d085a495e475",
+  "payload": {
+    "advisoryNotes": [
+      {
+        "decision": "texto omitido",
+        "finding": "texto omitido",
+        "owner": "texto omitido",
+        "status": "texto omitido"
+      },
+      {
+        "decision": "texto omitido",
+        "finding": "texto omitido",
+        "owner": "texto omitido",
+        "status": "texto omitido"
+      },
+      {
+        "decision": "texto omitido",
+        "finding": "texto omitido",
+        "owner": "texto omitido",
+        "status": "texto omitido"
+      }
+    ],
+    "authoritativeStatePendingIntegrator": true,
+    "baseSha": "0ed85f68cfa53468a01e75102e24db827deab0c1",
+    "branch": "texto omitido",
+    "codeIntegrated": {
+      "authorizedByEventId": "texto omitido",
+      "mainSha": "d8b5da0365b21ea2f69ea31ebf3b602213e47d5e",
+      "mergeSha": "abba84c2555ccbb9ec873c954d7200378e05a2e8"
+    },
+    "deepReviewApprovalEventId": "texto omitido",
+    "docsOnlyRemaining": true,
+    "evidencePath": "/fixture/ef900acb9a70",
+    "evidenceSha256": "424e51b2cd6a3ad891c4c65002a09894fddec20f1d9adb659f12f506cd258d5d",
+    "gateContract": {
+      "authorizationEventId": "texto omitido",
+      "codeConflict": "texto omitido",
+      "command": [
+        "texto omitido",
+        "texto omitido"
+      ],
+      "mergeCurrentMain": true,
+      "mergeStrategy": "texto omitido",
+      "onGreen": "texto omitido",
+      "owner": "texto omitido",
+      "principalWorktreeFrozen": true,
+      "recordProtectedResourcesBeforeAfter": true
+    },
+    "gateResults": [
+      {
+        "exitCode": 0,
+        "fullGate": true,
+        "gate": "texto omitido",
+        "leaseReleasedByResponsible": true,
+        "logPath": "/fixture/83a650193568",
+        "logSha256": "43d2351619f49382b6687784e460bcb6707179387704f1ff003f408d2417e813",
+        "protectedAfter": {
+          "path": "/fixture/98aa446d40eb",
+          "sha256": "fba595459f8a35d9df455f5ef38bcc321cae557e8f5aa4e7dd6059a278f40966"
+        },
+        "protectedBefore": {
+          "path": "/fixture/305e18e651e6",
+          "sha256": "fba595459f8a35d9df455f5ef38bcc321cae557e8f5aa4e7dd6059a278f40966"
+        },
+        "protectedUnchanged": true,
+        "sha": "ada2ed9253a4c49715499d41dbdc66b4a0566e72",
+        "stages": [
+          {
+            "exitCode": 0,
+            "seconds": 7,
+            "stage": "texto omitido"
+          },
+          {
+            "exitCode": 0,
+            "seconds": 15,
+            "stage": "texto omitido"
+          },
+          {
+            "exitCode": 0,
+            "seconds": 47,
+            "stage": "texto omitido"
+          }
+        ],
+        "timesPath": "/fixture/df29179f4b46",
+        "timesSha256": "6d542d1e79b5d7cafa74e5690e09337bf923c70017c8645b8286af1870c1c0f0"
+      },
+      {
+        "exitCode": 0,
+        "fullGate": false,
+        "gate": "texto omitido",
+        "leaseReleasedByResponsible": true,
+        "logPath": "/fixture/3947807fe124",
+        "logSha256": "e11170307acdff8215f96c6ef1fd4e79a851581c854b7bf837cb5995d29f195a",
+        "protectedAfter": {
+          "path": "/fixture/223d8c57e101",
+          "sha256": "fba595459f8a35d9df455f5ef38bcc321cae557e8f5aa4e7dd6059a278f40966"
+        },
+        "protectedBefore": {
+          "path": "/fixture/c0dcc9204408",
+          "sha256": "fba595459f8a35d9df455f5ef38bcc321cae557e8f5aa4e7dd6059a278f40966"
+        },
+        "protectedUnchanged": true,
+        "sha": "d8b5da0365b21ea2f69ea31ebf3b602213e47d5e",
+        "stages": [
+          {
+            "exitCode": 0,
+            "seconds": 4,
+            "stage": "texto omitido"
+          },
+          {
+            "exitCode": 0,
+            "seconds": 21,
+            "stage": "texto omitido"
+          },
+          {
+            "exitCode": 0,
+            "seconds": 193,
+            "stage": "texto omitido"
+          }
+        ],
+        "timesPath": "/fixture/7bf04c0b57a6",
+        "timesSha256": "593290d7d1ef7c20c64438b457a3c7d71b2e01c3900369d3e4e5333f58501099"
+      }
+    ],
+    "headSha": "669a7d93735ecb520cda5a8acc3b39d1520f14c4",
+    "mergeRecordPath": "/fixture/16082bafc7db",
+    "mergeRecordSha256": "8c37e69b3e6b9665c6822fec79f316626469a2a023d899ae5f88310c39689ae0",
+    "openFindings": [],
+    "phase3ApprovalEventId": "texto omitido",
+    "planPath": "/fixture/1f3e22732aa0",
+    "planSha256": "69caab50490677e13c592c6f53b0ee38560a96f467864ba38cf3a2100a1e4561",
+    "reportPath": "/fixture/d5a9e8d4dc42",
+    "reportSha256": "d62caccf5052cc498baaa28ceea542b711306952e627e5f8070513f8f4fcd29e",
+    "resourcesRetained": true,
+    "result": "texto omitido",
+    "sliceId": "texto omitido",
+    "taskApprovals": {
+      "S605-T01": {
+        "approvalEventId": "texto omitido",
+        "approvalReportPath": "/fixture/8d891c4652ce",
+        "approvalReportSha256": "8d609cd32645451f062d3d48d71c33b119826272d35e6034bfa0120f162c13f7",
+        "candidateSha": "cc1ac0fa1ce64ef0c86fb4569df63452e992b176",
+        "integrationSha": "72e4473a2e6aaef817bdc27acc65738937e05979",
+        "reportPath": "/fixture/6ea836d61389"
+      },
+      "S605-T02": {
+        "approvalEventId": "texto omitido",
+        "approvalReportPath": "/fixture/c802feb7e00a",
+        "approvalReportSha256": "a24cad3ce4d12d2fc9cba1341c19df74f81bf2406a23b80f3f1f883de432eae4",
+        "candidateSha": "f82cb071e902fc49045ea231667fe9608253e279",
+        "integrationSha": "19fee393d45d940916c0dfc086e02e86f623b822",
+        "reportPath": "/fixture/57b13b2489bd"
+      },
+      "S605-T03": {
+        "approvalEventId": "texto omitido",
+        "approvalReportPath": "/fixture/df6e1f73b5d3",
+        "approvalReportSha256": "44f785934d63563643382669378272bd74e73f2101e244d76fbb14c659917289",
+        "candidateSha": "e4eb1841b79448c94ea31d2c255969139d6cde12",
+        "integrationSha": "45322adeedc80910e5fbf06fbe9c96fa90f978d8",
+        "reportPath": "/fixture/f72c916141f7"
+      },
+      "S605-T04": {
+        "approvalEventId": "texto omitido",
+        "approvalReportPath": "/fixture/96d3e13fed8f",
+        "approvalReportSha256": "41ec1e122a048996388c89091066b0ba40ed74899b7978c89d8c8c85aa4ec436",
+        "candidateSha": "9da53f7c7a669b4adb32139f307cc5ad04cd0e2f",
+        "integrationSha": "137e4e0591dc2ad351e1db98e22f2c49647cb494",
+        "reportPath": "/fixture/708e4308ffcd"
+      },
+      "S605-T05": {
+        "approvalEventId": "texto omitido",
+        "approvalReportPath": "/fixture/ae7fbc9f4cba",
+        "approvalReportSha256": "ca5603cf5073fba3b9b110f30b7f1bbe3523889e6e39c62d0a3da65cc618a953",
+        "candidateSha": "3a68fe29000f341b8ca7363905bc837b1de2de98",
+        "integrationSha": "2b75733159cb5374a1087886478ad748ea8fe99c",
+        "reportPath": "/fixture/6ff61abcb7fb"
+      },
+      "S605-T06": {
+        "approvalEventId": "texto omitido",
+        "approvalReportPath": "/fixture/1c74470f9b16",
+        "approvalReportSha256": "380ef4809a5f2745f00074db7f76d3bcbba819bd28b7d48f6c80a72202cfe209",
+        "candidateSha": "a41f5e8b43db1f08d139f46f76786c65e733b87c",
+        "integrationSha": "3bdbaec55a2c247175f707b4098f4a5cc8a0133c",
+        "reportPath": "/fixture/1f465dca01a5"
+      },
+      "S605-T07": {
+        "approvalEventId": "texto omitido",
+        "approvalReportPath": "/fixture/c078ba499c59",
+        "approvalReportSha256": "7caa17694dbe7b9a2ff42fc2b1698106c94238299b0e8b5fb50a7ccbd6f2f805",
+        "candidateSha": "da09a45bfe460b324e93f80211aa45049eca0af7",
+        "integrationSha": "a85e00ab81fec17ccdd1840b939b7cb26154e6c5",
+        "reportPath": "/fixture/de301508dd44"
+      }
+    },
+    "worktree": "/fixture/89ed7e53c26a"
+  },
+  "runId": "253ea5ac-1daf-43ef-bce3-ba1ff96735f6",
+  "sentAt": "2026-10-24T21:22:58.956091+00:00",
+  "to": "orquestrador",
+  "type": "SLICE_READY"
+}

@@ -1,0 +1,13 @@
+{
+  "from": "orquestrador",
+  "fromGeneration": 1,
+  "id": "169a0bbb-eb3d-412e-aaae-975b91097654",
+  "payload": {
+    "bootstrapChildrenAuthorized": true,
+    "note": "texto omitido"
+  },
+  "runId": "253ea5ac-1daf-43ef-bce3-ba1ff96735f6",
+  "sentAt": "2026-10-24T13:00:25.082264+00:00",
+  "to": "s605-principal",
+  "type": "RESUME"
+}

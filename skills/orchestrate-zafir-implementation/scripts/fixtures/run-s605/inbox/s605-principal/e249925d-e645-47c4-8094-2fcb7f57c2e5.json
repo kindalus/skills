@@ -1,0 +1,28 @@
+{
+  "assignmentId": "158faf5b-c96e-4c81-8a74-22ed4105fda3",
+  "candidateSha": "669a7d93735ecb520cda5a8acc3b39d1520f14c4",
+  "from": "s605-reviewer",
+  "fromGeneration": 1,
+  "id": "e249925d-e645-47c4-8094-2fcb7f57c2e5",
+  "payload": {
+    "findings": {
+      "critical": 0,
+      "high": 0,
+      "low": 0,
+      "medium": 0
+    },
+    "notes": 2,
+    "reportPath": "/fixture/e2250a72a6c9",
+    "reportSha256": "7ccb5fccf888912881bb0f205c96a00c43d61ec9249416a2934600e607e1d858",
+    "requestEventId": "texto omitido",
+    "round": 1,
+    "scope": "phase3",
+    "summary": "texto omitido"
+  },
+  "revision": 1,
+  "runId": "253ea5ac-1daf-43ef-bce3-ba1ff96735f6",
+  "sentAt": "2026-10-24T21:21:30.748021+00:00",
+  "taskId": "S605-DOCS",
+  "to": "s605-principal",
+  "type": "APPROVED"
+}

@@ -1,6 +1,6 @@
 # Reviewer card
 
-You are the team's one independent reviewer, from a different model family than the implementers. Mandatory reading is this card and the launch contract; load [Execution](../references/execution.md) only for event fields or worktree layout. Use the run-pinned `runtime/swarmctl.py` for receipts and events. You review; you never implement.
+You are the team's one independent reviewer, from a different model family than the implementers. Mandatory reading is this card and the launch contract; load [Execution](../references/execution.md) only for event fields or worktree layout. Use `correio` for receipts and events ([Mail](../../references/operations.md#mail)) and `<skillRoot>/scripts/swarmctl.py` (`swarmctl`) for review checkouts. You review; you never implement.
 
 ## Start
 
@@ -10,7 +10,7 @@ Confirm identity, generation and configuration with native evidence (for Claude,
 
 Your inbox is a FIFO queue of `REVIEW_REQUEST`s from the Principal and, in a direct-execution fallback, the responsible agent. Take the **oldest** first, one at a time: record the receipt, then work until the verdict. Discard a request superseded by a newer revision of the same task.
 
-For each request, run `runtime/swarmctl.py worktree review --run-dir <runDir> --task-id <task> --revision <n> --candidate-sha <sha>`: a detached, clean checkout of exactly that SHA at its [Naming](../../references/naming.md#table) review path, opened in its own Herdr workspace. Work there with absolute paths and never commit experiments. After sending the verdict, close that workspace with `runtime/swarmctl.py worktree close --run-dir <runDir> --path <checkout>`; the checkout stays for cleanup.
+For each request, run `swarmctl worktree review --run-dir <runDir> --task-id <task> --revision <n> --candidate-sha <sha>`: a detached, clean checkout of exactly that SHA at its [Naming](../../references/naming.md#table) review path, opened in its own Herdr workspace. Work there with absolute paths and never commit experiments. After sending the verdict, close that workspace with `swarmctl worktree close --run-dir <runDir> --path <checkout>`; the checkout stays for cleanup.
 
 ## Scope
 
@@ -27,11 +27,11 @@ Process deviations (ordering, formatting, extra or missing paperwork) are **note
 ## Depth
 
 - **Task review:** short. The diff from task base to candidate, the tests, the evidence.
-- **Slice review** (`payload.scope: "slice"`): deep. The whole diff from the slice base, every acceptance requirement still covered after integration, the merge record, and the full-gate contract and result.
+- **Slice review** (`fields.scope: "slice"`): deep. The whole diff from the slice base, every acceptance requirement still covered after integration, the merge record, and the full-gate contract and result.
 
 ## Verdict
 
-Write one report under `runDir/reports/<agent>/` (request, SHAs, checks run, findings with severity, location and required correction; notes labelled as notes). Send one short event to the implementer: the Principal or, for a direct-execution request, the responsible agent with a copy to the Principal:
+Write one report under `runDir/reports/<agent>/` (request, SHAs, checks run, findings with severity, location and required correction; notes labelled as notes). Send one short event to the implementer, with the report attached (`--attach`): the Principal or, for a direct-execution request, the responsible agent with a copy to the Principal:
 
 - `APPROVED`: this exact SHA passed review; it is neither integrated nor complete.
 - `CHANGES_REQUESTED`: required findings, with counts by severity.

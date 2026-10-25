@@ -1,0 +1,34 @@
+{
+  "from": "s605-principal",
+  "fromGeneration": 1,
+  "id": "dc6c52d6-667e-4355-bd39-df97833ed632",
+  "payload": {
+    "awaiting": "texto omitido",
+    "baseSha": "0ed85f68cfa53468a01e75102e24db827deab0c1",
+    "branch": "texto omitido",
+    "childrenCreated": false,
+    "clean": true,
+    "configuration": "codex gpt-6.1-sol high",
+    "generation": 1,
+    "headSha": "0ed85f68cfa53468a01e75102e24db827deab0c1",
+    "nativeEvidence": {
+      "effort": "texto omitido",
+      "model": "texto omitido",
+      "sessionPath": "/fixture/4eeeef9d7ef0",
+      "source": "texto omitido"
+    },
+    "paneId": "texto omitido",
+    "reportPath": "/fixture/7ceb49585a50",
+    "reportSha256": "1f7e4bf6f1b4246ddee2f2c6bb16ab00f6d4a0524d38c76aac8799925bf2be45",
+    "result": "texto omitido",
+    "role": "principal",
+    "sessionId": "texto omitido",
+    "tabId": "texto omitido",
+    "workspaceId": "texto omitido",
+    "worktree": "/fixture/89ed7e53c26a"
+  },
+  "runId": "253ea5ac-1daf-43ef-bce3-ba1ff96735f6",
+  "sentAt": "2026-10-24T13:00:18.870640+00:00",
+  "to": "orquestrador",
+  "type": "AGENT_READY"
+}

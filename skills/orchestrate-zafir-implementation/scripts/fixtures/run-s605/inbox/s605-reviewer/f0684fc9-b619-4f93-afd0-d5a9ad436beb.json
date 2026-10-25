@@ -1,0 +1,104 @@
+{
+  "assignmentId": "20348b8c-1264-42e5-85d6-035f4243eab0",
+  "candidateSha": "ada2ed9253a4c49715499d41dbdc66b4a0566e72",
+  "from": "s605-principal",
+  "fromGeneration": 1,
+  "id": "f0684fc9-b619-4f93-afd0-d5a9ad436beb",
+  "payload": {
+    "baseSha": "0ed85f68cfa53468a01e75102e24db827deab0c1",
+    "branch": "texto omitido",
+    "ceilingUsage": {
+      "grossGo": 1000,
+      "grossTests": 2878,
+      "testR55Maximum": 2900
+    },
+    "checkpointPath": "/fixture/a253904b7ac6",
+    "checkpointSha256": "564fee94480dd764113d6f196887109abd08f3db4e61475ded41106111486525",
+    "evidencePath": "/fixture/c548c756d59a",
+    "evidenceSha256": "69378a42fe35f83a76274017440092ed02ffdfb6a0a1bce5c6ca03abddfd9346",
+    "fullCompliance": {
+      "candidateSha": "ada2ed9253a4c49715499d41dbdc66b4a0566e72",
+      "exitCode": 0,
+      "fullGate": false,
+      "logPath": "/fixture/444c79cdddda",
+      "noLease": true,
+      "sha256": "db67e15bf646d31f182287fd1ca941561f39e5e9b64bd32bde59480754b16a6c",
+      "singleFlockTimeout": 3600
+    },
+    "fullGateStatus": "texto omitido",
+    "gateOrderAuthorization": "texto omitido",
+    "openFindings": [],
+    "ownDiffBaseSha": "022dae11dc66cc2b30cdae90b05b37a79aa50db6",
+    "redReportPath": "/fixture/5804a41d6c0d",
+    "redReportSha256": "97111c4a15b3aee8bee24ce23a7718d83f815d230be43cbf62eeb7896314cab8",
+    "reportPath": "/fixture/cfc3094625de",
+    "reportSha256": "99276c84ba5ea2ad91018e2332f61013e01b4a9dddec5ccbe1910e7629968d5a",
+    "result": "texto omitido",
+    "scope": "slice",
+    "taskApprovals": {
+      "S605-T01": {
+        "approvalEventId": "texto omitido",
+        "approvalReportPath": "/fixture/8d891c4652ce",
+        "approvalReportSha256": "8d609cd32645451f062d3d48d71c33b119826272d35e6034bfa0120f162c13f7",
+        "candidateSha": "cc1ac0fa1ce64ef0c86fb4569df63452e992b176",
+        "integrationSha": "72e4473a2e6aaef817bdc27acc65738937e05979",
+        "reportPath": "/fixture/6ea836d61389"
+      },
+      "S605-T02": {
+        "approvalEventId": "texto omitido",
+        "approvalReportPath": "/fixture/c802feb7e00a",
+        "approvalReportSha256": "a24cad3ce4d12d2fc9cba1341c19df74f81bf2406a23b80f3f1f883de432eae4",
+        "candidateSha": "f82cb071e902fc49045ea231667fe9608253e279",
+        "integrationSha": "19fee393d45d940916c0dfc086e02e86f623b822",
+        "reportPath": "/fixture/57b13b2489bd"
+      },
+      "S605-T03": {
+        "approvalEventId": "texto omitido",
+        "approvalReportPath": "/fixture/df6e1f73b5d3",
+        "approvalReportSha256": "44f785934d63563643382669378272bd74e73f2101e244d76fbb14c659917289",
+        "candidateSha": "e4eb1841b79448c94ea31d2c255969139d6cde12",
+        "integrationSha": "45322adeedc80910e5fbf06fbe9c96fa90f978d8",
+        "reportPath": "/fixture/f72c916141f7"
+      },
+      "S605-T04": {
+        "approvalEventId": "texto omitido",
+        "approvalReportPath": "/fixture/96d3e13fed8f",
+        "approvalReportSha256": "41ec1e122a048996388c89091066b0ba40ed74899b7978c89d8c8c85aa4ec436",
+        "candidateSha": "9da53f7c7a669b4adb32139f307cc5ad04cd0e2f",
+        "integrationSha": "137e4e0591dc2ad351e1db98e22f2c49647cb494",
+        "reportPath": "/fixture/708e4308ffcd"
+      },
+      "S605-T05": {
+        "approvalEventId": "texto omitido",
+        "approvalReportPath": "/fixture/ae7fbc9f4cba",
+        "approvalReportSha256": "ca5603cf5073fba3b9b110f30b7f1bbe3523889e6e39c62d0a3da65cc618a953",
+        "candidateSha": "3a68fe29000f341b8ca7363905bc837b1de2de98",
+        "integrationSha": "2b75733159cb5374a1087886478ad748ea8fe99c",
+        "reportPath": "/fixture/6ff61abcb7fb"
+      },
+      "S605-T06": {
+        "approvalEventId": "texto omitido",
+        "approvalReportPath": "/fixture/1c74470f9b16",
+        "approvalReportSha256": "380ef4809a5f2745f00074db7f76d3bcbba819bd28b7d48f6c80a72202cfe209",
+        "candidateSha": "a41f5e8b43db1f08d139f46f76786c65e733b87c",
+        "integrationSha": "3bdbaec55a2c247175f707b4098f4a5cc8a0133c",
+        "reportPath": "/fixture/1f465dca01a5"
+      },
+      "S605-T07": {
+        "approvalEventId": "texto omitido",
+        "approvalReportPath": "/fixture/c078ba499c59",
+        "approvalReportSha256": "7caa17694dbe7b9a2ff42fc2b1698106c94238299b0e8b5fb50a7ccbd6f2f805",
+        "candidateSha": "da09a45bfe460b324e93f80211aa45049eca0af7",
+        "integrationSha": "a85e00ab81fec17ccdd1840b939b7cb26154e6c5",
+        "reportPath": "/fixture/de301508dd44"
+      }
+    },
+    "worktree": "/fixture/89ed7e53c26a"
+  },
+  "revision": 1,
+  "runId": "253ea5ac-1daf-43ef-bce3-ba1ff96735f6",
+  "sentAt": "2026-10-24T19:55:50.191439+00:00",
+  "taskId": "S605",
+  "to": "s605-reviewer",
+  "type": "REVIEW_REQUEST"
+}

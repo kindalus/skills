@@ -240,6 +240,7 @@ class SwarmTest(unittest.TestCase):
             "roster": {"coders": 0},
             "models": {"principal": "pi ollama/example high", "reviewer": "claude claude-opus-5-5 high"},
             "processPaths": [str(self.repo / "process.md")],
+            "automation": "2.7.0",  # this file covers the legacy file-event automation; test_swarm_v3.py covers 3.0.0
         }
         self.contract_path = self.temp / "contract.json"
         self.contract_path.write_text(json.dumps(self.contract))

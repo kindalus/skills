@@ -1,0 +1,66 @@
+{
+  "assignmentId": "609baa9c-3445-49a9-b979-3d48cbf48578",
+  "candidateSha": "e4eb1841b79448c94ea31d2c255969139d6cde12",
+  "from": "s605-principal",
+  "fromGeneration": 1,
+  "id": "0640b6ca-e298-4569-ae89-1a150600ac36",
+  "payload": {
+    "additionalGeneralRuleCases": [],
+    "addressedFindings": [
+      "texto omitido",
+      "texto omitido"
+    ],
+    "authorizationEventId": "texto omitido",
+    "baseSha": "19fee393d45d940916c0dfc086e02e86f623b822",
+    "branch": "texto omitido",
+    "ceilingUsage": {
+      "goCeiling": 1605,
+      "grossGo": 637,
+      "grossTests": 2721,
+      "testCeiling": 2850
+    },
+    "grantPath": "/fixture/377acf565846",
+    "grantSha256": "6d9cc91b98f603eab185c90d710b5fdb29d598234d7f435410441f650bcac25a",
+    "mutantsKilled": 42,
+    "newC03MutantsKilled": 4,
+    "omissionProofPath": "/fixture/3a2e96cd3625",
+    "openFindings": [
+      "texto omitido",
+      "texto omitido"
+    ],
+    "previousCandidateSha": "b6f5a697d251d55817afddcdbea9cc904a406399",
+    "redReportPath": "/fixture/5804a41d6c0d",
+    "reportPath": "/fixture/f72c916141f7",
+    "reportSha256": "a0507aef74a3511d6fe73d2afeac453e0472b2be9a614204fba1ea3050dbf08b",
+    "result": "texto omitido",
+    "scope": "task",
+    "subceilingTransfers": [
+      "texto omitido"
+    ],
+    "tests": {
+      "C03Fail": 0,
+      "C03Pass": 2,
+      "C03Skip": 0,
+      "nativeRetained": {
+        "fail": 0,
+        "notRerunOnR2": true,
+        "pass": 93,
+        "sha": "b6f5a697d251d55817afddcdbea9cc904a406399",
+        "skip": 0
+      },
+      "newRegressionCount": 0,
+      "wholeNoPG": {
+        "fail": 8,
+        "pass": 1677,
+        "skip": 1034
+      }
+    },
+    "worktree": "/fixture/333ae3a1389e"
+  },
+  "revision": 2,
+  "runId": "253ea5ac-1daf-43ef-bce3-ba1ff96735f6",
+  "sentAt": "2026-10-24T16:23:45.196444+00:00",
+  "taskId": "S605-T03",
+  "to": "s605-reviewer",
+  "type": "REVIEW_REQUEST"
+}

@@ -1,0 +1,16 @@
+{
+  "assignmentId": "46396598-69de-44d0-bb3c-f535da5348a3",
+  "from": "s605-principal",
+  "fromGeneration": 1,
+  "id": "5a27b9be-d473-47de-b660-8f63a9693533",
+  "payload": {
+    "grantPath": "/fixture/5d02e9c86236",
+    "grantSha256": "70c8a6523629c5c8fadd2345c6ecc5ec4628c8b36719b6dfafe393ee3f217c8a"
+  },
+  "revision": 1,
+  "runId": "253ea5ac-1daf-43ef-bce3-ba1ff96735f6",
+  "sentAt": "2026-10-24T14:14:29.258781+00:00",
+  "taskId": "S605-T02",
+  "to": "s605-principal",
+  "type": "TASK_ASSIGN"
+}

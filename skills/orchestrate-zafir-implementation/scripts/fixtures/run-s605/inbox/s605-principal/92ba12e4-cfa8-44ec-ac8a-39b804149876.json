@@ -1,0 +1,17 @@
+{
+  "candidateSha": "669a7d93735ecb520cda5a8acc3b39d1520f14c4",
+  "from": "orquestrador",
+  "fromGeneration": 1,
+  "id": "92ba12e4-cfa8-44ec-ac8a-39b804149876",
+  "payload": {
+    "gate": "texto omitido",
+    "integratedIn": "texto omitido",
+    "mergeCommit": "texto omitido",
+    "note": "texto omitido",
+    "result": "texto omitido"
+  },
+  "runId": "253ea5ac-1daf-43ef-bce3-ba1ff96735f6",
+  "sentAt": "2026-10-24T21:45:31.177080+00:00",
+  "to": "s605-principal",
+  "type": "SLICE_ACCEPTED"
+}

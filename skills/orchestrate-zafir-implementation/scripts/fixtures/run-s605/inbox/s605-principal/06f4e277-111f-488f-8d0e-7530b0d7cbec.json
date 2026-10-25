@@ -1,0 +1,13 @@
+{
+  "from": "orquestrador",
+  "fromGeneration": 1,
+  "id": "06f4e277-111f-488f-8d0e-7530b0d7cbec",
+  "payload": {
+    "decision": "texto omitido",
+    "pinnedLog": "/fixture/c7c789909455"
+  },
+  "runId": "253ea5ac-1daf-43ef-bce3-ba1ff96735f6",
+  "sentAt": "2026-10-24T18:17:39.483889+00:00",
+  "to": "s605-principal",
+  "type": "RESUME"
+}

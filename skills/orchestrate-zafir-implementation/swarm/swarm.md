@@ -1,6 +1,6 @@
 # Swarm
 
-A swarm implements one approved slice (Zafir 5.5–5.7) from the project's **delivery package** and hands it to the orchestrator as `SLICE_READY`. The orchestrator is the swarm's **responsible agent**: it launches and supervises the run, owns the host's exclusive lease, answers escalations, and is the single integrator into main. Versioned scripts do the deterministic mechanics (bootstrap, event delivery, snapshots, gates); agents keep every scope, review, integration and recovery decision. Reading this section launches nothing.
+A swarm implements one approved slice (Zafir 5.5–5.7) from the project's **delivery package** and hands it to the orchestrator as `SLICE_READY`. The orchestrator is the swarm's **responsible agent**: it launches and supervises the run, owns the host's exclusive lease, answers escalations, and is the single integrator into main. Versioned scripts do the deterministic mechanics (bootstrap, snapshots, gates), and its events travel by correio under the pinned protocol `swarm/3.0.0` ([Mail](../references/operations.md#mail)); agents keep every scope, review, integration and recovery decision. Reading this section launches nothing.
 
 ## Roster
 
@@ -15,7 +15,7 @@ A swarm implements one approved slice (Zafir 5.5–5.7) from the project's **del
 
 - Launch only after reading the admission's dispatch notes, not just its verdict. The notes are binding: copy them into the BOOT brief, and a technical blocker among them stops the launch.
 - **Preflight:** delivery package, launch contract, `swarmctl doctor`, `bootstrap responsible --dry-run`. Done when the dry run is clean.
-- **Bootstrap:** `bootstrap responsible` creates the slice worktree's Herdr workspace and starts the Principal in its root pane; after its `AGENT_READY` and the orchestrator's `RESUME`, `bootstrap principal` starts the reviewer. Done on a validated `SWARM_READY`.
+- **Bootstrap:** `bootstrap responsible` creates the run's correio space and members and the slice worktree's Herdr workspace, and starts the Principal in its root pane; after its `AGENT_READY` and the orchestrator's `RESUME`, `bootstrap principal` starts the reviewer. Done on a validated `SWARM_READY`.
 
 ## Cycle
 
@@ -43,7 +43,7 @@ A swarm implements one approved slice (Zafir 5.5–5.7) from the project's **del
 - **Merge, never rebase:** phase SHAs are evidence; each conflict resolution is recorded (file, side, why).
 - **Guards only get stricter**; a looser guard is an escalation.
 - **Model incidents** go through `MODEL_ERROR` and `MODEL_REPLACE`; nobody substitutes a model or shrinks the team.
-- **State lives in files** (plan, `state.json`, reports). The Principal may ask for a clean restart between phases; nothing forces one.
+- **State is a projection** of accepted events in correio: task phases (`TASK_PHASE` red and green), reviews, integration, the slice's state and each member's generation ([Automation](references/automation.md#state-as-projection)). The plan, the open findings and the reports live in files. The Principal may ask for a clean restart between phases; nothing forces one.
 - **Direct-execution fallback:** when the swarm stalls on mechanical work, the orchestrator may do it itself, still sending it to the reviewer.
 - **Process frozen at start:** the cards and the process are read at startup. A later change to the project's process applies only to slices whose implementation starts after it (Zafir SKILL.md *Process version*); a slice in progress finishes with the cycle it started with and records the transition in its spec's amendments log.
 - No push, team edits on main, force-push, credential changes, destructive cleanup or extra agents. `SLICE_READY` means ready to integrate, not merged.
@@ -81,7 +81,7 @@ The scripts start both under their Naming agent names and pane titles: the Princ
 
 ## Supervise and receive
 
-- **Supervise:** keep the supervisor alive, answer escalations and lease requests, handle model incidents. Done on `SLICE_READY`, a genuine blocker or cancellation.
+- **Supervise:** watch the run in `correio open --space <prefix>`, answer escalations and lease requests, handle model incidents. Done on `SLICE_READY`, a genuine blocker or cancellation.
 - **Receive:** the code integrates through the merge queue (Cycle, step 8); on the phase-3 `SLICE_READY`, verify the slice SHA and minimum evidence, then integrate the phase-3 delta as a documentation batch ([Integration](../integration/integration.md)) or return findings. Done when the hand-off is acknowledged.
 
 ## Success criteria

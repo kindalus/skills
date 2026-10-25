@@ -1,0 +1,12 @@
+{
+  "from": "orquestrador",
+  "fromGeneration": 1,
+  "id": "4ef73c1e-be45-4cc3-b123-5d8cb1f94f02",
+  "payload": {
+    "decision": "texto omitido"
+  },
+  "runId": "253ea5ac-1daf-43ef-bce3-ba1ff96735f6",
+  "sentAt": "2026-10-24T13:03:25.698301+00:00",
+  "to": "s605-principal",
+  "type": "RESUME"
+}

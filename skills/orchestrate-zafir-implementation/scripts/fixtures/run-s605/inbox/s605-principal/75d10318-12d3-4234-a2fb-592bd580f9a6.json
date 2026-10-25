@@ -1,0 +1,17 @@
+{
+  "from": "orquestrador",
+  "fromGeneration": 1,
+  "id": "75d10318-12d3-4234-a2fb-592bd580f9a6",
+  "payload": {
+    "expectedConfiguration": "texto omitido",
+    "generation": 1,
+    "instruction": "texto omitido",
+    "launchPath": "/fixture/1912ff8c951c",
+    "ponytailPath": "/fixture/7e72b65de8d4",
+    "rolePath": "/fixture/7936e963b66e"
+  },
+  "runId": "253ea5ac-1daf-43ef-bce3-ba1ff96735f6",
+  "sentAt": "2026-10-24T12:58:49.154787+00:00",
+  "to": "s605-principal",
+  "type": "BOOT"
+}

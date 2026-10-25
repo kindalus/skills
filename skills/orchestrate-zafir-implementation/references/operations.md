@@ -23,25 +23,57 @@ Shell and Herdr lessons that bite every role. Read the `herdr` skill first; the 
 
 ## Mail
 
-Agents outside a swarm (orchestrator, spokesperson, preparers, consultants, bug executors) talk through **mail**, never through `herdr agent prompt`: a prompt to a `blocked` agent is rejected with `agent_blocked` and lost. Swarm members keep their run's events (`swarmctl`), which follow the same rules.
+Every agent talks through **correio**, never through `herdr agent prompt`: a prompt to a `blocked` agent is rejected with `agent_blocked` and lost. One SQLite database (`J/correio.db`, WAL, mode 0600) holds the messages of every **space**: the orchestration team (protocol `orchestration/1.0.0`) and each swarm (`swarm/3.0.0`, [Automation](../swarm/references/automation.md#events-and-receipts)). A space pins its protocol and version at creation; `send` validates by that version and refuses what breaks it.
 
-- **Mailbox:** `$J/correio/`, one `inbox/<agent>/` and one `receipts/<agent>/` per agent name. A message is a file; a receipt closes it.
-- **Send:** `python3 <skill>/scripts/correio.py send --from <you> --to <agent> --type PEDIDO|ENTREGA|INFO --subject "<one line>" --body-file <file>` (or `--body "<short text>"`; `--payload-file <json>` for structured data). `PEDIDO` asks for an action, `ENTREGA` hands over a result to check, `INFO` decides nothing.
-- **Receive:** the courier prompts you with the path of your oldest unread message. Record the receipt before acting: `correio.py receipt --agent <you> --id <id> --disposition "<what you do>"`. The next message comes only after that receipt.
-- **Courier:** a `systemd --user` service (`correio-<repo-key>.service`) runs `correio.py daemon`. It delivers one message per recipient at a time (FIFO), only while the recipient is `idle` or `done`; for a `blocked` or absent one it raises a Herdr notification. It retries on a 30 s backoff doubling to 480 s and never drops a message.
-- **Observers:** the same daemon replaces every re-armed watcher. With `--watch-to orquestrador` it mails the orchestrator when any agent turns `blocked` (except the quiet ones, `--quiet porta-voz`), when an agent matching `--done-pattern` goes from `working` to `done` or `idle`, when a `--watch-ref <repo>:origin/main` advances, and when a swarm event under `--watch-runs <runs dir>` waits more than 120 s for its receipt.
+`correio` below means `python3 <skill>/scripts/correio.py`; `<you>` is your agent name.
+
+- **Send:** `correio send --space <space> --thread <thread> --type <type> --from <you> --to <agent> --subject "<one line>" --body-file <file.md>` (or `--body "<short text>"`). Add `--reply-to <id>` when you answer a message, `--field key=value` (`key:=<json>` for a number, boolean or structure; `--field-file key=<file.json>`) for data, and `--attach <path>` to cite a file by path and sha256. The CLI writes the envelope; you never write one.
+- **Threads:** every message lives in a thread, the slice or the request: `S606`, `S606/REQUEST-15`, `geral`. A reply stays in the thread of its message. `correio thread <thread>` shows the conversation.
+- **Types** (orchestration): `PEDIDO` asks for an action, `ENTREGA` hands over a result to check, `INFO` decides nothing and wakes nobody (`--field close:=true` closes its thread); `OWNER_QUESTION` and `OWNER_ANSWER` belong to the [owner questions](#owner-questions).
+- **Receive:** the courier prompts you with the id of your oldest unreceipted message. Read it with `correio show <id>`, then record the receipt before acting: `correio receipt --agent <you> --id <id> --disposition "<what you do>"` (`--reject` to refuse it). The next message comes only after that receipt. Unread `INFO` rides as a count in your next prompt; receipt it in one step with `correio receipt --all-info --agent <you> --disposition lido`.
+- **Look:** `correio inbox --agent <you>`, `correio show <id>`, `correio thread <thread>`, `correio search "<text>"`; `correio open` lists what needs attention (unreceipted mail and its age, unanswered `PEDIDO`s, open threads, blocked members, active grants, the host queue, the courier's heartbeat).
+- **Identity:** inside Herdr, `send` and `receipt` check `--from`/`--agent` against the calling pane (`HERDR_PANE_ID`). You act only as yourself.
 - **Who talks to whom:** agents write to each other directly, without copying the orchestrator; the orchestrator gets only what is addressed to it. Send what changes the recipient's next action, never a bare acknowledgement.
 - **Bootstrap exception:** the first instruction to a freshly started agent, and harness commands such as `/clear` or `/compact`, still go by `herdr agent prompt`, because the agent does not know its mailbox yet.
+
+### Orchestration space
+
+The orchestrator creates it once and adds every agent outside a swarm as a member when it starts:
+
+```bash
+correio space create --id orq --kind orchestration --protocol orchestration --version 1.0.0
+correio member add --space orq --agent orquestrador --role orchestrator --pane "$HERDR_PANE_ID"
+correio member add --space orq --agent porta-voz --role spokesperson --pane <pane>
+correio member add --space orq --agent s606-preparer --role preparer --pane <pane>   # also consultant, executor
+```
+
+With one open orchestration space, `--space` may be left out. A member that closes leaves with `correio member leave --space orq --agent <name>`. Mark a consultant or bug executor as holding work with `correio member update --space orq --agent <name> --grant "<slice round or bug>"`, and clear it at release with `--clear-grant`: the courier reports its end only while the grant is active.
+
+### Courier
+
+A `systemd --user` service (`correio-<repo-key>.service`) runs `correio daemon`; a `correio-watchdog.timer` restarts it when its heartbeat is older than 2 minutes. Per recipient it prompts the oldest unreceipted wake message (FIFO), only while the agent is `idle` or `done`, with the prompt text of the space's protocol version; a `working` agent waits, and a `blocked` or absent one gets a Herdr notification. It resolves the agent by name, and by its member pane when the name is absent or ambiguous. It retries on a 30 s backoff doubling to 480 s and never drops a message: one without a receipt for 2 h raises a notification and a `PEDIDO` to the orchestrator. It skips messages to yourself, closed spaces and legacy imports, and it backs the database up daily to `J/backups/` (14 days).
+
+**Observers** mail the orchestrator (`--watch-to`, thread `correio/...`) when an agent turns `blocked` (except `--quiet` ones), when an agent matching `--done-pattern` goes from `working` to `done` or `idle` with an active grant, when a `--watch-ref <repo>:origin/main` advances, when a swarm message waits more than 120 s for its receipt, when a host job ends with a non-zero exit (the `jobs` table, and `--watch-jobs` JSONL until it is retired), and when an open 2.7 run (`--watch-runs`) has its `swarmd` dead. Each observer seeds silently on its first run, so a restart replays nothing.
+
+### Host queue
+
+Gates, batches and windows queue in the `jobs` table: `correio jobs add --kind gate|lote|janela --who <slice> [--priority 1] -- <command>`, `correio jobs list [--last <n>]`. The queue runner claims one at a time with `correio jobs next` (highest priority, then arrival) and closes it with `correio jobs finish <id> --exit <code>`.
+
+### Evidence
+
+Evidence stays in files; messages cite it by path and sha256. When a slice closes, export its space into the slice's evidence: `correio export --space <space> --out <dir>` writes one `.md` per message (its exact envelope bytes), `messages.jsonl`, `space.json` and `SHA256SUMS`.
+
+**Rollback:** the v1 file mailbox still runs as `correio.py legacy <send|receipt|pending|show|daemon>`.
 
 ## Owner questions
 
 The orchestrator never asks the owner directly: a question dialog blocks it, and then its mail cannot be delivered. The **spokesperson** (`porta-voz`, [card](spokesperson.md)) asks in its place.
 
 1. Write the owner request (`J/requests/REQUEST-<n>.md`) as usual.
-2. Mail a `PEDIDO` to `porta-voz` whose payload is `{"request": "REQUEST-<n>", "askUserQuestion": [<the exact AskUserQuestion questions>]}`, and keep working.
-3. The spokesperson returns the owner's verbatim answers as an `ENTREGA`; record them as `ANSWER-<n>` and apply them.
+2. Write the exact AskUserQuestion `questions` array to a JSON file and send it: `correio send --thread <slice>/REQUEST-<n> --type OWNER_QUESTION --from orquestrador --to porta-voz --subject "REQUEST-<n>: <one line>" --field request=REQUEST-<n> --field-file askUserQuestion=<file.json>`. Keep working.
+3. The spokesperson answers with an `OWNER_ANSWER` in the same thread, `--reply-to` your question, whose `fields.answers` holds the owner's verbatim answers; record them as `ANSWER-<n>` and apply them.
 
-Start the spokesperson once, in a pane of the orchestrator's tab: `herdr agent start porta-voz --kind claude --pane <id> -- --model claude-haiku-5-5 --allowedTools "Bash(python3 <skill>/scripts/correio.py:*)" AskUserQuestion "Write(/tmp/**)"`, then prompt it with the path of its card.
+Start the spokesperson once, in a pane of the orchestrator's tab: `herdr agent start porta-voz --kind claude --pane <id> -- --model claude-haiku-5-5 --allowedTools "Bash(python3 <skill>/scripts/correio.py:*)" AskUserQuestion "Write(/tmp/**)"`, add it as a member, then prompt it with the path of its card.
 
 ## Stalls
 

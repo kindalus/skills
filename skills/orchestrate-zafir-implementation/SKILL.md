@@ -28,9 +28,9 @@ Resolve every path from this skill's directory and pass absolute paths in every 
 2. **Register.** Give this pane the orchestrator's agent name, pane title and tab from [Naming](references/naming.md#table) (`herdr agent rename "$HERDR_PANE_ID"`, `herdr pane rename`, `herdr tab rename`). If another live orchestrator exists, stop and ask.
 3. **Job directory.** `J=${XDG_STATE_HOME:-$HOME/.local/state}/orchestrate-zafir-implementation/<repo-key>/`, mode `0700`, outside every worktree. It holds the [decision log](#decision-log), the [owner requests](#owner-requests), the [consultant queue](consultants/consultants.md#queue), `preparers.txt`, briefs, admissions, gate logs and the swarms' `runs/`. Reuse it on resume.
 4. **Environment.** Read `herdr agent list` and create only the missing tabs and agents, named and titled per [Naming](references/naming.md#table): the consultants at reasoning high ([Roster](consultants/consultants.md#roster)), the bug executors, codex in yolo mode ([Bugs](#bugs)), and one workspace per preparer, opened on demand ([Preparers](#preparers)). Swarms run in their own Herdr workspaces, created by the swarm bootstrap.
-5. **Mail.** Install and start the courier service once (`correio-<repo-key>.service`, running `scripts/correio.py daemon` with the session's `HERDR_SESSION` and `HERDR_SOCKET_PATH`), and start the spokesperson in a pane of this tab ([Mail](references/operations.md#mail), [Owner questions](references/operations.md#owner-questions)).
+5. **Mail.** Create the orchestration space once and add yourself, the spokesperson and every agent of step 4 as members ([Orchestration space](references/operations.md#orchestration-space)); add each later agent when it starts. Install and start the courier service and its watchdog timer once (`correio-<repo-key>.service`, running `scripts/correio.py daemon` with the session's `HERDR_SESSION` and `HERDR_SOCKET_PATH`), and start the spokesperson in a pane of this tab ([Courier](references/operations.md#courier), [Owner questions](references/operations.md#owner-questions)).
 
-Done when preflight passes, the name is registered, `J` exists and every tab holds its live agents.
+Done when preflight passes, the name is registered, `J` exists, every tab holds its live agents, and `scripts/correio.py open` shows the orchestration space with every agent as a member and a fresh courier heartbeat.
 
 ## Authority
 
@@ -102,8 +102,9 @@ Just-in-time: a slice that depends on one still in swarm opens its preparer only
 
 ## Supervision
 
-- **Swarm events.** Each swarm's supervisor (`swarmd`) delivers its events to your inbox. Drain them with `<runDir>/runtime/swarmctl.py event pending --run-dir <runDir> --recipient orchestrator`, and answer escalations, `LEASE_REQUEST`, `MODEL_ERROR` and `SLICE_READY` as the [responsible card](swarm/roles/responsible.md) sets. Restart a stale supervisor (`supervision/status.json`) from its runtime.
-- **Mail.** The courier prompts you with your oldest unread message: receipt it, act, and answer by mail ([Mail](references/operations.md#mail)). Instructions to agents outside a swarm go by mail too.
+- **Overview.** `correio open` (`correio` is `python3 scripts/correio.py`) is your general check: unreceipted mail and its age, unanswered requests, open threads, blocked members, active grants, swarm tasks, the host queue and the courier's heartbeat. Run it at each transition and whenever the courier is quiet for long.
+- **Mail and swarm events.** The courier prompts you with your oldest unreceipted message, from the orchestration space or from any swarm's space: receipt it, act, and answer by mail ([Mail](references/operations.md#mail)). Answer escalations, `LEASE_REQUEST`, `MODEL_ERROR` and `SLICE_READY` as the [responsible card](swarm/roles/responsible.md) sets. Instructions to every agent go by mail.
+- **Legacy runs.** A swarm launched under 2.7.0 keeps its run-pinned `swarmd` and file events until it closes: drain them with `<runDir>/runtime/swarmctl.py event pending --run-dir <runDir> --recipient <you>`, and restart a stale `swarmd` from its runtime. Import such a run once, read-only, with `correio import-run --run-dir <runDir>`; the courier refreshes the import every 5 minutes, so `correio open` shows it.
 - **Blocked agents.** Answer a `blocked` agent at once.
 - **Stalls.** A `working` agent that stops progressing, or whose last lines show a network or model error, gets the [stall procedure](references/operations.md#stalls).
 - **Context.** To compact an agent, or yourself, follow [Context](references/operations.md#context).

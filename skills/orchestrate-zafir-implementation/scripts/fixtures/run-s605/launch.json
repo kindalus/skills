@@ -1,0 +1,32 @@
+{
+  "baseSha": "0ed85f68cfa53468a01e75102e24db827deab0c1",
+  "models": {
+    "principal": "codex gpt-6.1-sol high",
+    "reviewer": "claude claude-opus-5-5 high"
+  },
+  "ponytailPath": "/fixture/ponytail/SKILL.md",
+  "prefix": "s605",
+  "processPaths": [
+    "/fixture/repo/AGENTS.md"
+  ],
+  "repoPath": "/fixture/repo",
+  "responsible": {
+    "agent": "orquestrador",
+    "paneId": "w1:p0",
+    "session": "fixture",
+    "workspaceId": "w1"
+  },
+  "roster": {
+    "coders": 0
+  },
+  "runDir": "/fixture/runs/s605",
+  "runId": "253ea5ac-1daf-43ef-bce3-ba1ff96735f6",
+  "skillRoot": "/fixture/skill/swarm",
+  "slice": {
+    "branch": "slice/s605",
+    "worktree": "/fixture/repo/.worktrees/s605"
+  },
+  "sliceId": "S605",
+  "specPath": "/fixture/repo/spec.md",
+  "worktreeRoot": "/fixture/repo/.worktrees"
+}

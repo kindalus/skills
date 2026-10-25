@@ -1,0 +1,60 @@
+{
+  "assignmentId": "046ccb1a-a6df-43a8-820d-ad43325ae096",
+  "candidateSha": "9da53f7c7a669b4adb32139f307cc5ad04cd0e2f",
+  "from": "s605-principal",
+  "fromGeneration": 1,
+  "id": "87215766-321b-438c-83d1-f3fa7f174763",
+  "payload": {
+    "baseSha": "45322adeedc80910e5fbf06fbe9c96fa90f978d8",
+    "branch": "texto omitido",
+    "ceilingUsage": {
+      "goCeiling": 1605,
+      "grossGo": 940,
+      "grossTests": 2725,
+      "testCeiling": 2850
+    },
+    "grantPath": "/fixture/1431c88b0a04",
+    "grantSha256": "aa94fdeda477dba07703cdd6212ddfab203da96dc64682e1d931f074ad9ed642",
+    "mutantsKilled": 48,
+    "omissionProofPath": "/fixture/d5ddf8d25478",
+    "openFindings": [
+      "texto omitido",
+      "texto omitido"
+    ],
+    "redReportPath": "/fixture/5804a41d6c0d",
+    "reportPath": "/fixture/708e4308ffcd",
+    "reportSha256": "f0e6bcb06db9ac6d2eee5eda3b882fc46567b5ef218f9788a4287f736b38b51c",
+    "result": "texto omitido",
+    "scope": "task",
+    "subceilingTransfers": [
+      "texto omitido"
+    ],
+    "tests": {
+      "finalShiftPortPass": 5,
+      "fullImporterWithoutPG": {
+        "C02RenamedCases": 2,
+        "explicitSkip": 1034,
+        "newRegressions": 0,
+        "pass": 1680,
+        "preExistingPGOnlyFailures": 5
+      },
+      "nativeFullOwnerPackages": {
+        "fail": 0,
+        "pass": 174,
+        "sha": "2f91fe7f0801ee98f1aa4ef7c4b9f36e01b90b25",
+        "skip": 0
+      },
+      "returnMEMPass": 4,
+      "returnPortPass": 5,
+      "shiftMEMPass": 4,
+      "shiftPortPass": 5
+    },
+    "worktree": "/fixture/95aaef65f7f5"
+  },
+  "revision": 1,
+  "runId": "253ea5ac-1daf-43ef-bce3-ba1ff96735f6",
+  "sentAt": "2026-10-24T16:49:20.326146+00:00",
+  "taskId": "S605-T04",
+  "to": "s605-reviewer",
+  "type": "REVIEW_REQUEST"
+}

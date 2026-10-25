@@ -1,0 +1,18 @@
+{
+  "from": "s605-reviewer",
+  "fromGeneration": 1,
+  "id": "abc515db-9851-4dfe-85de-bd0f24110253",
+  "payload": {
+    "agent": "s605-reviewer",
+    "bootEventId": "texto omitido",
+    "configuration": "claude claude-opus-5-5 high",
+    "evidence": "texto omitido",
+    "generation": 1,
+    "status": "texto omitido",
+    "toolCheck": "texto omitido"
+  },
+  "runId": "253ea5ac-1daf-43ef-bce3-ba1ff96735f6",
+  "sentAt": "2026-10-24T13:03:09.237823+00:00",
+  "to": "s605-principal",
+  "type": "AGENT_READY"
+}

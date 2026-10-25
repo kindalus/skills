@@ -1,0 +1,37 @@
+{
+  "candidateSha": "3bdbaec55a2c247175f707b4098f4a5cc8a0133c",
+  "from": "s605-principal",
+  "fromGeneration": 1,
+  "id": "f103bf48-0629-4cfb-943b-4939b385f81c",
+  "payload": {
+    "noLeaseOrGate": true,
+    "ownCost": {
+      "go": 1000,
+      "testCeilingR55": 2900,
+      "tests": 2878
+    },
+    "productionOrMetadataEdited": false,
+    "projectedFocusedTests": {
+      "fail": 0,
+      "pass": 2,
+      "skip": 0
+    },
+    "proposalPatchPath": "/fixture/8f7cb4edae34",
+    "proposalPatchSha256": "3cd46e5d32341652bf6b1f02d3067120ee59efe9e6467fb6f89cfc1cea0477fa",
+    "reason": "texto omitido",
+    "recommendedDecision": "texto omitido",
+    "reportPath": "/fixture/5bb19baa5c48",
+    "reportSha256": "b3e3c3341733b1373b91354f4400388dc20013be795b611214599f0dafa93aff",
+    "request": "texto omitido",
+    "requestedPaths": [
+      "texto omitido"
+    ],
+    "result": "texto omitido",
+    "scope": "integration companion metadata path"
+  },
+  "runId": "253ea5ac-1daf-43ef-bce3-ba1ff96735f6",
+  "sentAt": "2026-10-24T19:23:45.376294+00:00",
+  "taskId": "S605",
+  "to": "orquestrador",
+  "type": "BLOCKED"
+}
