@@ -532,6 +532,13 @@ class SwarmV3Test(unittest.TestCase):
                     os.environ.pop(key)
                 self.edit_fake(lambda fake: fake["agents"].pop("t123-principal"))
 
+    def test_the_boot_prompt_names_the_runs_database(self) -> None:
+        swarmctl.bootstrap_responsible(self.contract_path, self.run_dir, dry_run=False, no_supervisor=True)
+        (prompt,) = [entry["message"] for entry in self.log_entries("prompt")]
+        db = json.loads((self.run_dir / "automation.json").read_text())["correio"]["db"]
+        self.assertIn(f"correio.py --db {db} show ", prompt)
+        self.assertIn(f"correio.py --db {db} receipt ", prompt)
+
     def test_responsible_bootstrap_dry_run_has_no_side_effects(self) -> None:
         result = swarmctl.bootstrap_responsible(self.contract_path, self.run_dir, dry_run=True, no_supervisor=False)
         self.assertTrue(result["dryRun"])

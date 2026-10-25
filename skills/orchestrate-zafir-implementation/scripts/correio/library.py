@@ -23,6 +23,13 @@ from .store import CorreioError, Store, parse_iso
 
 SCRIPTS = pathlib.Path(__file__).resolve().parent.parent
 CLI = f"python3 {SCRIPTS / 'correio.py'}"
+
+
+def cli_for(db: os.PathLike[str] | str) -> str:
+    """The CLI as an agent must type it: always with ``--db``, since an agent never inherits the courier's
+    environment ($CORREIO_DB) and would otherwise read the default database."""
+    import shlex
+    return f"{CLI} --db {shlex.quote(str(pathlib.Path(db).resolve()))}"
 SPACE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 ROLE = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
 MAX_DISPOSITION = 1000

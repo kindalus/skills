@@ -354,6 +354,10 @@ class DeliveryTest(CourierCase):
         prompts = [c for c in calls if c[:2] == ["agent", "prompt"]]
         self.assertEqual(prompts[0][2], "s606-preparer")
         self.assertIn(sent, prompts[0][3])
+        # An agent does not inherit the courier's environment: every command in the prompt names the database.
+        db = os.environ["CORREIO_DB"]
+        self.assertIn(f"correio.py --db {db} show {sent}", prompts[0][3])
+        self.assertIn(f"correio.py --db {db} receipt --agent s606-preparer", prompts[0][3])
 
 
 class ObserverTest(CourierCase):

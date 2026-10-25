@@ -61,8 +61,20 @@ def out(value: Any) -> None:
     print(json.dumps(value, ensure_ascii=False, sort_keys=True, default=str))
 
 
+# Only these create correio.db when it is missing; every other command (reading, send, receipt, jobs, ...) needs
+# an existing database and fails without creating one: a command run against the wrong path must not leave an
+# empty base there (the canary's agents once created one at the live path).
+CREATES_DB = {("space", "create"), ("import-files", None), ("import-run", None), ("import-jobs", None),
+              ("daemon", None)}
+
+
 def store_from(args: argparse.Namespace) -> Store:
-    return Store(args.db or default_db_path())
+    path = pathlib.Path(args.db or default_db_path())
+    sub = getattr(args, "space_command", None) if args.command == "space" else None
+    if not path.is_file() and (args.command, sub) not in CREATES_DB:
+        raise CorreioError(f"no correio database at {path}: nothing was created. Name the right one with --db <path> "
+                           "(or CORREIO_DB=<path>); only space create, import-files/run/jobs and daemon create it")
+    return Store(path)
 
 
 # -- text views (agents read these; --json gives the data) --------------------------------------------------------------
@@ -307,6 +319,7 @@ def cmd_daemon(args: argparse.Namespace, store: Store) -> int:
         fetch_every=args.fetch_every, watch_runs=tuple(args.watch_runs), watch_jobs=tuple(args.watch_jobs),
         space=args.space, backup_dir=None if args.no_backup else (args.backup_dir or str(store.path.parent / "backups")),
         backup_keep=args.backup_keep, legacy_refresh=args.legacy_refresh, readonly=args.readonly,
+        cli=library.cli_for(store.path),
         only_kind=args.only_kind, sync_v1_root=args.sync_v1_root, sync_v1_jobs=args.sync_v1_jobs)
     return daemon.run(store, daemon.Herdr(), options, interval=args.interval, once=args.once)
 

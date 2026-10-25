@@ -10,6 +10,7 @@ import time
 import os
 import pathlib
 import re
+import shlex
 import subprocess
 import sys
 from typing import Any
@@ -328,7 +329,9 @@ def correio_member(root: pathlib.Path, agent: str, **cols: Any) -> None:
 
 def boot_prompt(root: pathlib.Path, ref: str, tail: str) -> str:
     if is_v3(root):
-        cli = f"python3 {run_marker(root)['correio']['scripts']}/correio.py"
+        # Always with the run's database: the agent does not inherit this process's environment.
+        marker = run_marker(root)["correio"]
+        cli = f"python3 {marker['scripts']}/correio.py --db {shlex.quote(str(marker['db']))}"
         return (f"Read and receipt BOOT {ref}: {cli} show {ref}, then {cli} receipt --agent <you> --id {ref} "
                 f"--disposition '<what you do>'. Send events with {cli} send (swarm/3.0.0). {tail}")
     return f"Read and receipt BOOT {ref}. {tail}"

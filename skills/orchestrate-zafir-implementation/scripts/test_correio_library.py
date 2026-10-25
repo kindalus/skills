@@ -522,6 +522,29 @@ class CliTest(CorreioCase):
         return subprocess.run(["/usr/bin/python3", str(HERE / "correio.py"), *argv], text=True, capture_output=True,
                               env=os.environ.copy(), check=check)
 
+    def test_reading_commands_never_create_a_database(self) -> None:
+        # The canary's Principal ran show without the run's base and created an empty correio.db at the live path.
+        missing = self.temp / "nowhere" / "state" / "correio.db"
+        for argv in (["show", "8f0c2a44-1d3b-4c55-9a77-0d2b3c4e5f60"], ["pending", "--agent", "x"],
+                     ["inbox", "--agent", "x"], ["open"], ["thread", "geral"], ["search", "x"], ["space", "list"],
+                     ["jobs", "list"], ["compat", "v1"], ["receipt", "--agent", "x", "--id", "y", "--disposition", "z"],
+                     ["send", "--from", "a", "--to", "b", "--type", "PEDIDO", "--thread", "geral", "--subject", "s"],
+                     ["watchdog"]):
+            with self.subTest(command=argv[0]):
+                result = self.cli("--db", str(missing), *argv, check=False)
+                self.assertNotEqual(result.returncode, 0)
+                if argv[0] != "watchdog":
+                    self.assertIn(f"no correio database at {missing}", result.stderr)
+                    self.assertIn("nothing was created", result.stderr)
+                self.assertFalse((self.temp / "nowhere").exists())
+        os.environ.pop("CORREIO_DB")  # the default path, as an agent without the run's environment
+        os.environ["XDG_STATE_HOME"] = str(self.temp / "xdg")
+        self.assertNotEqual(self.cli("show", "8f0c2a44-1d3b-4c55-9a77-0d2b3c4e5f60", check=False).returncode, 0)
+        self.assertFalse((self.temp / "xdg").exists())
+        created = self.cli("--db", str(missing), "space", "create", "--id", "orq", "--kind", "orchestration",
+                           "--protocol", "orchestration", "--version", "1.0.0")  # creating one is explicit
+        self.assertTrue(missing.is_file(), created.stderr)
+
     def test_the_wrapper_drives_the_whole_flow(self) -> None:
         self.cli("space", "create", "--id", "orq", "--kind", "orchestration", "--protocol", "orchestration",
                  "--version", "1.0.0")
