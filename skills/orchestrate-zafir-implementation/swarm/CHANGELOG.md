@@ -11,9 +11,11 @@ Events move into correio v2, the one mail system of the orchestration team and t
 - **Events in correio:** a run is a swarm space in `correio.db` pinned at protocol `swarm/3.0.0`, a 1:1 port of the 2.7.0 rules (the 19 event types, routes, bindings, generation check, grant re-hash, `MODEL_REPLACE` and the reviewer quota fallback marker, receipt idempotence and conflicts). Agents send with `correio send` and receipt with `correio receipt`; `swarmctl event send|receipt|pending` delegate to it. A payload is the envelope's one-level `fields`; structure goes in the Markdown body or an attachment.
 - **State as projection:** accepted events update the space state, the tasks and the members in the receipt's transaction (`references/automation.md` *State as projection*). Nobody writes `state.json`; the Principal keeps its plan and `findings.md` in `reports/`.
 - **New events:** `TASK_PHASE` (INFO, Principal → responsible, `fields.phase` red or green) replaces the red/green edits of `state.json`; `INFO` (wakes nobody) carries progress and the files `swarmctl` creates (worktree, artefact, snapshot, gate) with their sha256. `TASK_INTEGRATED` may also go from the Principal to itself.
-- **Delivery:** the correio courier delivers swarm events with the 2.7.0 prompt text; `bootstrap responsible` starts no `swarmd`, and nothing is copied into `runDir/runtime/`: the space's protocol version is the pin. `swarmd.py` stays for 2.7.0 runs.
+- **Delivery:** the correio courier delivers swarm events with the 2.7.0 prompt text, less the thread (free text: the prompt carries only the validated type, id and sender); `bootstrap responsible` starts no `swarmd`, and nothing is copied into `runDir/runtime/`: the space's protocol version is the pin. `swarmd.py` stays for 2.7.0 runs.
 - **Bootstrap:** `init` creates the space and its members; `bootstrap principal --authorization-event` takes the RESUME's message id; `restart-principal` bumps the member generation and sends a BOOT with `rotationReason`; worktree resources live in `resources.json`.
-- **Receipts:** a reject receipt is always allowed, so an event whose grant changed is refused instead of waiting.
+- **Receipts:** a reject receipt is always allowed, so an event whose grant changed, or whose sender has since moved to a newer generation, is refused instead of waiting; neither can be accepted.
+- **Terminal state:** once `accepted` or `cancelled`, a late receipt of an older event no longer moves the space.
+- **Cancel:** a `CANCEL` the Principal accepts makes the space `cancelled` but keeps it open, for the Principal's `CANCEL` to each booted child only, until each child has receipted it.
 
 ### Compatibility
 
