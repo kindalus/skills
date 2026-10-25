@@ -21,6 +21,27 @@ Shell and Herdr lessons that bite every role. Read the `herdr` skill first; the 
 - **Names and titles:** every agent name, pane title, tab and workspace label comes from [Naming](naming.md), which also says when to retitle.
 - **Notifications** (`herdr notification show "<title>" --body "<text>" --sound request|done`) only for a slice started or closed, an agent `blocked`, a suspected stall, or a red gate.
 
+## Mail
+
+Agents outside a swarm (orchestrator, spokesperson, preparers, consultants, bug executors) talk through **mail**, never through `herdr agent prompt`: a prompt to a `blocked` agent is rejected with `agent_blocked` and lost. Swarm members keep their run's events (`swarmctl`), which follow the same rules.
+
+- **Mailbox:** `$J/correio/`, one `inbox/<agent>/` and one `receipts/<agent>/` per agent name. A message is a file; a receipt closes it.
+- **Send:** `python3 <skill>/scripts/correio.py send --from <you> --to <agent> --type PEDIDO|ENTREGA|INFO --subject "<one line>" --body-file <file>` (or `--body "<short text>"`; `--payload-file <json>` for structured data). `PEDIDO` asks for an action, `ENTREGA` hands over a result to check, `INFO` decides nothing.
+- **Receive:** the courier prompts you with the path of your oldest unread message. Record the receipt before acting: `correio.py receipt --agent <you> --id <id> --disposition "<what you do>"`. The next message comes only after that receipt.
+- **Courier:** a `systemd --user` service (`correio-<repo-key>.service`) runs `correio.py daemon`. It delivers one message per recipient at a time (FIFO), only while the recipient is `idle` or `done`; for a `blocked` or absent one it raises a Herdr notification. It retries on a 30 s backoff doubling to 480 s and never drops a message.
+- **Who talks to whom:** agents write to each other directly, without copying the orchestrator; the orchestrator gets only what is addressed to it. Send what changes the recipient's next action, never a bare acknowledgement.
+- **Bootstrap exception:** the first instruction to a freshly started agent, and harness commands such as `/clear` or `/compact`, still go by `herdr agent prompt`, because the agent does not know its mailbox yet.
+
+## Owner questions
+
+The orchestrator never asks the owner directly: a question dialog blocks it, and then its mail cannot be delivered. The **spokesperson** (`porta-voz`, [card](spokesperson.md)) asks in its place.
+
+1. Write the owner request (`J/requests/REQUEST-<n>.md`) as usual.
+2. Mail a `PEDIDO` to `porta-voz` whose payload is `{"request": "REQUEST-<n>", "askUserQuestion": [<the exact AskUserQuestion questions>]}`, and keep working.
+3. The spokesperson returns the owner's verbatim answers as an `ENTREGA`; record them as `ANSWER-<n>` and apply them.
+
+Start the spokesperson once, in a pane of the orchestrator's tab: `herdr agent start porta-voz --kind claude --pane <id> -- --model claude-haiku-5-5 --allowedTools "Bash(python3 <skill>/scripts/correio.py:*)" AskUserQuestion "Write(/tmp/**)"`, then prompt it with the path of its card.
+
 ## Stalls
 
 1. `herdr agent get <name>` and a bounded `herdr agent read <name>`.

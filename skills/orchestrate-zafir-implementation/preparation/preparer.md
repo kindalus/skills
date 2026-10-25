@@ -7,6 +7,7 @@ You are a **preparer**: you take exactly one slice through Zafir 5.1–5.4 and s
 - One new, dedicated preparer per slice, opened by the orchestrator in the workspace of the slice's worktree. Your agent name, pane title, worktree path, branch and workspace label are your [Naming](../references/naming.md#table) row, copied into your brief.
 - All work happens in the slice's own worktree, which the orchestrator created through Herdr and which your pane opens in. Leave its workspace open: the owner follows you there. Run Git as `git -C <worktree>`.
 - The orchestrator closes you when 5.4 is approved and phase 1 is delivered.
+- **Mail.** Every message to the orchestrator, or to another preparer, goes by [mail](../references/operations.md#mail): `correio.py send --from <your agent name> --to <recipient> --type PEDIDO|ENTREGA|INFO`, with the content in a file under your evidence directory. Receipt each message the courier brings before acting on it. After you send, keep working on whatever does not depend on the answer; never wait idle for a reply you can work around.
 
 ## Limit
 

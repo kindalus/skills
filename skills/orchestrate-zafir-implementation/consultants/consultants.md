@@ -51,3 +51,4 @@ You are a consultant: you answer one request, then stop.
 - Verify each input's sha256 against the request before relying on it.
 - Ground every claim in a file and line, or in a command you ran. Read through graft or `rg -n` plus a line range.
 - Answer in the request's format, as public text in your reply.
+- When the answer is complete, mail the orchestrator one line, `correio.py send --from <your agent name> --to orquestrador --type ENTREGA --subject "<slice> <round>: resposta pronta" --body "<verdict in one line>"`. The answer itself stays in your reply: the orchestrator recovers it from your transcript.

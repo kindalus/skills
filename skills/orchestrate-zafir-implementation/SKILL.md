@@ -28,6 +28,7 @@ Resolve every path from this skill's directory and pass absolute paths in every 
 2. **Register.** Give this pane the orchestrator's agent name, pane title and tab from [Naming](references/naming.md#table) (`herdr agent rename "$HERDR_PANE_ID"`, `herdr pane rename`, `herdr tab rename`). If another live orchestrator exists, stop and ask.
 3. **Job directory.** `J=${XDG_STATE_HOME:-$HOME/.local/state}/orchestrate-zafir-implementation/<repo-key>/`, mode `0700`, outside every worktree. It holds the [decision log](#decision-log), the [owner requests](#owner-requests), the [consultant queue](consultants/consultants.md#queue), `preparers.txt`, briefs, admissions, gate logs and the swarms' `runs/`. Reuse it on resume.
 4. **Environment.** Read `herdr agent list` and create only the missing tabs and agents, named and titled per [Naming](references/naming.md#table): the consultants at reasoning high ([Roster](consultants/consultants.md#roster)), the bug executors, codex in yolo mode ([Bugs](#bugs)), and one workspace per preparer, opened on demand ([Preparers](#preparers)). Swarms run in their own Herdr workspaces, created by the swarm bootstrap.
+5. **Mail.** Install and start the courier service once (`correio-<repo-key>.service`, running `scripts/correio.py daemon` with the session's `HERDR_SESSION` and `HERDR_SOCKET_PATH`), and start the spokesperson in a pane of this tab ([Mail](references/operations.md#mail), [Owner questions](references/operations.md#owner-questions)).
 
 Done when preflight passes, the name is registered, `J` exists and every tab holds its live agents.
 
@@ -51,7 +52,7 @@ Every message to the owner follows the Zafir rule *Talking to the user*.
 
 ### Owner requests
 
-One file per request, `J/requests/REQUEST-<n>.md`, `<n>` the next free number. It states the slice and the question, the options with their consequences, your recommendation, and, for a 5.4 approval, the paths and sha256 of the spec, the approval deck and every assessment the project requires. Send the owner the path and its sha256. Record the owner's answer as `ANSWER <n>` in the decision log and apply it.
+One file per request, `J/requests/REQUEST-<n>.md`, `<n>` the next free number. It states the slice and the question, the options with their consequences, your recommendation, and, for a 5.4 approval, the paths and sha256 of the spec, the approval deck and every assessment the project requires. Ask through the spokesperson, never in your own pane ([Owner questions](references/operations.md#owner-questions)): a dialog blocks you and your mail. Record the owner's answer as `ANSWER <n>` in the decision log and apply it.
 
 ## Capacity and readiness
 
@@ -95,13 +96,14 @@ Just-in-time: a slice that depends on one still in swarm opens its preparer only
 - Executors, named per [Naming](references/naming.md#table): `herdr agent start <name> --kind codex --pane <id> -- --model gpt-6.1-sol -c 'model_reasoning_effort="high"' --dangerously-bypass-approvals-and-sandbox`.
 - Each bug gets an ID (the next free one) and a brief, and follows Zafir SHORT-PATHS *Bug fix workflow* on its own branch and worktree; the executor's pane title names the bug ([Naming](references/naming.md#table)).
 - Its review is independent and from a family other than codex's: a Claude or agy consultant grant from the queue.
-- An executor stops before a fix that needs a new decision and brings options; you decide, or send an owner request.
+- An executor stops before a fix that needs a new decision and brings options; you decide, or send an owner request. It reports the final SHA and the options by [mail](references/operations.md#mail).
 - A pre-existing defect found in a slice is recorded as a separate bug; the slice preserves the behaviour.
 - The fix joins the next batch.
 
 ## Supervision
 
 - **Swarm events.** Each swarm's supervisor (`swarmd`) delivers its events to your inbox. Drain them with `<runDir>/runtime/swarmctl.py event pending --run-dir <runDir> --recipient orchestrator`, and answer escalations, `LEASE_REQUEST`, `MODEL_ERROR` and `SLICE_READY` as the [responsible card](swarm/roles/responsible.md) sets. Restart a stale supervisor (`supervision/status.json`) from its runtime.
+- **Mail.** The courier prompts you with your oldest unread message: receipt it, act, and answer by mail ([Mail](references/operations.md#mail)). Instructions to agents outside a swarm go by mail too.
 - **Blocked agents.** Answer a `blocked` agent at once.
 - **Stalls.** A `working` agent that stops progressing, or whose last lines show a network or model error, gets the [stall procedure](references/operations.md#stalls).
 - **Context.** To compact an agent, or yourself, follow [Context](references/operations.md#context).

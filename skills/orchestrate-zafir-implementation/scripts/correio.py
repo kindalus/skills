@@ -1,0 +1,294 @@
+#!/usr/bin/env python3
+"""Correio: durable mailbox and courier for the agents outside a swarm (orchestrator, spokesperson,
+preparers, consultants, bug executors).
+
+Every message is a file in inbox/<recipient>/; a receipt in receipts/<recipient>/ closes it. The courier
+delivers each recipient's oldest unreceipted message (FIFO) by `herdr agent prompt`, only while the
+recipient is idle or done; a blocked or absent recipient gets a Herdr notification instead. It retries
+with backoff (30 s doubling, 480 s ceiling) and never gives up: the file stays until it is receipted.
+
+  correio.py send --from A --to B --type PEDIDO|ENTREGA|INFO --subject S (--body TEXT | --body-file F)
+                  [--payload-file JSON]
+  correio.py receipt --agent B --id ID --disposition TEXT
+  correio.py pending --agent B
+  correio.py show --agent B --id ID
+  correio.py daemon [--interval 10] [--retry-min 30] [--max-backoff 480]
+
+The root is $CORREIO_ROOT or ~/.local/state/orchestrate-zafir-implementation/<repo-key>/correio, with
+<repo-key> from $CORREIO_REPO_KEY (default: uwassi).
+"""
+from __future__ import annotations
+
+import argparse
+import contextlib
+import datetime as dt
+import fcntl
+import hashlib
+import json
+import os
+import pathlib
+import re
+import signal
+import subprocess
+import sys
+import time
+import uuid
+from typing import Any
+
+TYPES = ("PEDIDO", "ENTREGA", "INFO")
+NAME = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+STOP = False
+
+
+def root_dir() -> pathlib.Path:
+    explicit = os.environ.get("CORREIO_ROOT")
+    if explicit:
+        return pathlib.Path(explicit)
+    key = os.environ.get("CORREIO_REPO_KEY", "uwassi")
+    return pathlib.Path.home() / ".local/state/orchestrate-zafir-implementation" / key / "correio"
+
+
+def now() -> str:
+    return dt.datetime.now(dt.timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+
+
+def die(message: str, code: int = 2) -> None:
+    print(json.dumps({"error": message}, ensure_ascii=False), file=sys.stderr)
+    raise SystemExit(code)
+
+
+def check_name(value: str, what: str) -> str:
+    if not NAME.match(value):
+        die(f"invalid {what}: {value!r}")
+    return value
+
+
+def private_dir(path: pathlib.Path) -> pathlib.Path:
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    return path
+
+
+def write_atomic(path: pathlib.Path, data: dict[str, Any], exclusive: bool = True) -> None:
+    private_dir(path.parent)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    with open(tmp, "x", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=1)
+        f.write("\n")
+        f.flush()
+        os.fsync(f.fileno())
+    os.chmod(tmp, 0o600)
+    if exclusive:
+        os.link(tmp, path)  # fails if the target exists
+        os.unlink(tmp)
+    else:
+        os.replace(tmp, path)
+
+
+def sha256_file(path: pathlib.Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def load(path: pathlib.Path) -> dict[str, Any]:
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def messages(root: pathlib.Path, agent: str) -> list[dict[str, Any]]:
+    inbox = root / "inbox" / agent
+    if not inbox.is_dir():
+        return []
+    found = []
+    for path in sorted(inbox.glob("*.json")):
+        with contextlib.suppress(OSError, ValueError):
+            message = load(path)
+            message["path"] = str(path)
+            message["receipted"] = (root / "receipts" / agent / f"{message['id']}.json").exists()
+            found.append(message)
+    found.sort(key=lambda m: (m.get("sentAt", ""), m.get("id", "")))
+    return found
+
+
+def cmd_send(args: argparse.Namespace) -> None:
+    root = root_dir()
+    sender, recipient = check_name(args.sender, "sender"), check_name(args.to, "recipient")
+    if (args.body is None) == (args.body_file is None):
+        die("give exactly one of --body or --body-file")
+    message_id = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + "-" + uuid.uuid4().hex[:8]
+    message: dict[str, Any] = {
+        "schemaVersion": 1, "id": message_id, "from": sender, "to": recipient, "type": args.type,
+        "subject": args.subject, "sentAt": now(),
+    }
+    if args.body is not None:
+        message["body"] = args.body
+    else:
+        body = pathlib.Path(args.body_file).resolve()
+        if not body.is_file():
+            die(f"body file not found: {body}")
+        message["bodyFile"] = {"path": str(body), "sha256": sha256_file(body)}
+    if args.payload_file:
+        payload_path = pathlib.Path(args.payload_file)
+        message["payload"] = load(payload_path)
+    path = root / "inbox" / recipient / f"{message_id}.json"
+    write_atomic(path, message)
+    print(json.dumps({"id": message_id, "path": str(path), "sha256": sha256_file(path)}))
+
+
+def cmd_receipt(args: argparse.Namespace) -> None:
+    root = root_dir()
+    agent = check_name(args.agent, "agent")
+    path = root / "inbox" / agent / f"{args.id}.json"
+    if not path.is_file():
+        die(f"no such message for {agent}: {args.id}")
+    receipt = {"schemaVersion": 1, "id": args.id, "agent": agent, "messageSha256": sha256_file(path),
+               "disposition": args.disposition, "receiptedAt": now()}
+    out = root / "receipts" / agent / f"{args.id}.json"
+    try:
+        write_atomic(out, receipt)
+    except FileExistsError:
+        die(f"already receipted: {args.id}", 1)
+    print(json.dumps({"receiptPath": str(out), "sha256": sha256_file(out)}))
+
+
+def cmd_pending(args: argparse.Namespace) -> None:
+    root = root_dir()
+    agent = check_name(args.agent, "agent")
+    pending = [{k: m.get(k) for k in ("id", "from", "type", "subject", "sentAt", "path")}
+               for m in messages(root, agent) if not m["receipted"]]
+    print(json.dumps({"agent": agent, "count": len(pending), "pending": pending}, ensure_ascii=False, indent=1))
+
+
+def cmd_show(args: argparse.Namespace) -> None:
+    root = root_dir()
+    path = root / "inbox" / check_name(args.agent, "agent") / f"{args.id}.json"
+    if not path.is_file():
+        die(f"no such message: {args.id}")
+    print(path.read_text(encoding="utf-8"), end="")
+
+
+def herdr(*argv: str, timeout: float = 15) -> dict[str, Any]:
+    binary = os.environ.get("CORREIO_HERDR", "herdr")
+    proc = subprocess.run([binary, *argv], capture_output=True, text=True, timeout=timeout)
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr.strip() or proc.stdout.strip() or f"herdr exit {proc.returncode}")
+    with contextlib.suppress(ValueError):
+        return json.loads(proc.stdout).get("result", {})
+    return {}
+
+
+def delay_for(attempts: int, minimum: float, ceiling: float) -> float:
+    return min(ceiling, minimum * (2 ** max(0, attempts - 1)))
+
+
+def prompt_text(root: pathlib.Path, message: dict[str, Any], queued: int) -> str:
+    me = pathlib.Path(__file__).resolve()
+    tail = f" (+{queued} na fila)" if queued else ""
+    return (f"Correio {message['type']} de {message['from']}: {message['subject']}{tail}. "
+            f"Lê {message['path']}. Antes de agir, regista o recibo: "
+            f"python3 {me} receipt --agent {message['to']} --id {message['id']} --disposition '<o que fazes>'. "
+            "Responde pela tua caixa de correio (correio.py send), nunca por herdr agent prompt.")
+
+
+def cycle(root: pathlib.Path, state: dict[str, Any], retry_min: float, ceiling: float) -> dict[str, Any]:
+    listed = herdr("agent", "list").get("agents", [])
+    agents = {a["name"]: a for a in listed if a.get("name")}
+    epoch, stamp = time.time(), now()
+    records = state.setdefault("messages", {})
+    alive: set[str] = set()
+    actions = []
+    inbox = root / "inbox"
+    recipients = sorted(p.name for p in inbox.iterdir() if p.is_dir()) if inbox.is_dir() else []
+    for recipient in recipients:
+        pending = [m for m in messages(root, recipient) if not m["receipted"]]
+        if not pending:
+            continue
+        head = pending[0]
+        alive.add(head["id"])
+        record = records.setdefault(head["id"], {"recipient": recipient, "attempts": 0, "lastAttemptEpoch": None})
+        agent = agents.get(recipient)
+        status = agent.get("agent_status") if agent else "absent"
+        last = record.get("lastAttemptEpoch")
+        due = last is None or epoch - float(last) >= delay_for(int(record["attempts"]), retry_min, ceiling)
+        action = {"id": head["id"], "recipient": recipient, "status": status, "action": "wait"}
+        if due and status in {"idle", "done"}:
+            try:
+                herdr("agent", "prompt", recipient, prompt_text(root, head, len(pending) - 1), timeout=15)
+                action["action"] = "prompt"
+            except Exception as error:  # noqa: BLE001 - the next due cycle retries
+                action["action"], action["error"] = "prompt-failed", str(error)[:300]
+            record.update(attempts=int(record["attempts"]) + 1, lastAttemptEpoch=epoch, lastAttemptAt=stamp)
+        elif due and status in {"blocked", "absent"}:
+            with contextlib.suppress(Exception):
+                herdr("notification", "show", f"Correio: {recipient} {status}",
+                      "--body", f"{head['type']} de {head['from']}: {head['subject']}"[:250], timeout=5)
+            action["action"] = "notify"
+            record.update(attempts=int(record["attempts"]) + 1, lastAttemptEpoch=epoch, lastAttemptAt=stamp)
+        actions.append(action)
+    state["messages"] = {k: v for k, v in records.items() if k in alive}
+    state.update(schemaVersion=1, pid=os.getpid(), checkedAt=stamp, actions=actions)
+    return state
+
+
+def cmd_daemon(args: argparse.Namespace) -> None:
+    root = private_dir(root_dir())
+    lock = open(root / "courier.lock", "a+")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        die("another courier is running", 1)
+
+    def stop(_s: int, _f: Any) -> None:
+        global STOP
+        STOP = True
+
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+    state_path = root / "delivery.json"
+    state = load(state_path) if state_path.exists() else {}
+    while not STOP:
+        try:
+            state = cycle(root, state, args.retry_min, args.max_backoff)
+            write_atomic(state_path, state, exclusive=False)
+        except Exception as error:  # noqa: BLE001 - keep the courier alive
+            print(f"{now()} cycle error: {error}", file=sys.stderr, flush=True)
+        for _ in range(int(args.interval * 10)):
+            if STOP:
+                break
+            time.sleep(0.1)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = parser.add_subparsers(dest="command", required=True)
+    p = sub.add_parser("send")
+    p.add_argument("--from", dest="sender", required=True)
+    p.add_argument("--to", required=True)
+    p.add_argument("--type", choices=TYPES, required=True)
+    p.add_argument("--subject", required=True)
+    p.add_argument("--body")
+    p.add_argument("--body-file")
+    p.add_argument("--payload-file")
+    p.set_defaults(func=cmd_send)
+    p = sub.add_parser("receipt")
+    p.add_argument("--agent", required=True)
+    p.add_argument("--id", required=True)
+    p.add_argument("--disposition", required=True)
+    p.set_defaults(func=cmd_receipt)
+    p = sub.add_parser("pending")
+    p.add_argument("--agent", required=True)
+    p.set_defaults(func=cmd_pending)
+    p = sub.add_parser("show")
+    p.add_argument("--agent", required=True)
+    p.add_argument("--id", required=True)
+    p.set_defaults(func=cmd_show)
+    p = sub.add_parser("daemon")
+    p.add_argument("--interval", type=float, default=10.0)
+    p.add_argument("--retry-min", type=float, default=30.0)
+    p.add_argument("--max-backoff", type=float, default=480.0)
+    p.set_defaults(func=cmd_daemon)
+    args = parser.parse_args()
+    os.umask(0o077)  # the mailbox is private to the owner
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()
