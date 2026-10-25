@@ -77,6 +77,8 @@ class Options:
     backup_dir: str | None = None
     backup_keep: int = 14
     legacy_refresh: float = 300.0
+    sync_v1_root: str | None = None  # while the v1 window is open: import late v1 mail each cycle
+    sync_v1_jobs: str | None = None  # ... and late lines of the v1 JSONL queue
     only_kind: str | None = None  # "swarm" after a rollback: carry only the open v3 runs, no observers or mail
     readonly: str = ""  # regex of read-only (sandboxed) agents: the courier receipts for them after the prompt
     cli: str = library.CLI
@@ -209,7 +211,8 @@ class Courier:
             report["errors"].append(f"herdr agent list: {exc}")
         steps = [("escalate", self.escalate), ("swarm-stuck", self.observe_swarm_stuck),
                  ("jobs", self.observe_jobs), ("refs", self.observe_refs), ("legacy", self.observe_legacy),
-                 ("backup", self.maybe_backup), ("legacy-refresh", self.maybe_refresh_legacy)]
+                 ("backup", self.maybe_backup), ("legacy-refresh", self.maybe_refresh_legacy),
+                 ("v1-sync", self.sync_v1)]
         if self.opts.only_kind:  # rollback: the v1 courier observes; this one only delivers and escalates
             steps = [("escalate", self.escalate), ("backup", self.maybe_backup)]
         if listed is not None:
@@ -470,6 +473,35 @@ class Courier:
                           f"Reinicia-o pelo runtime da run: {run_dir}/runtime/swarmd.py --run-dir {run_dir}",
                           "correio/swarms")
         self.save("legacy-swarmd", state)
+
+    def sync_v1(self) -> None:
+        """While the cutover window is open, import what producers that still run the v1 code write (mail,
+        receipts, queue lines), so the last manual import is not the last chance: the window closes only once
+        these syncs have stopped finding anything (``correio compat v1`` shows the last one)."""
+        if not (self.opts.sync_v1_root or self.opts.sync_v1_jobs) or not library.compat_v1(self.store)["active"]:
+            return
+        from . import importers
+        state, _first = self.observer("v1-sync")
+        imported = state.setdefault("imported", {"messages": 0, "receipts": 0, "jobs": 0})
+        new = 0
+        errors: list[Any] = []
+        if self.opts.sync_v1_root and pathlib.Path(self.opts.sync_v1_root).is_dir():
+            counts = importers.import_files(self.store, self.opts.sync_v1_root, space=self.opts.space)
+            new += counts["messages"] + counts["receipts"]
+            imported["messages"] += counts["messages"]
+            imported["receipts"] += counts["receipts"]
+            errors += counts["errors"]
+        if self.opts.sync_v1_jobs and pathlib.Path(self.opts.sync_v1_jobs).is_file():
+            counts = importers.import_jobs(self.store, self.opts.sync_v1_jobs)
+            new += counts["jobs"]
+            imported["jobs"] += counts["jobs"]
+            errors += counts["errors"]
+        state["lastRun"] = self.store.now()
+        state["lastErrors"] = errors[:20]
+        if new:
+            state["lastNew"] = self.store.now()
+        state.setdefault("lastNew", None)
+        self.save("v1-sync", state)
 
     def maybe_backup(self) -> None:
         if not self.opts.backup_dir:

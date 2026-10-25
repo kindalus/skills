@@ -418,6 +418,42 @@ class ObserverTest(CourierCase):
         self.assertEqual(sorted(m["subject"] for m in self.mails("PEDIDO")),
                          ["swarm s617: LEASE_REQUEST para ti", "swarm s617: evento parado"])
 
+    def test_the_transition_window_keeps_importing_late_v1_producers(self) -> None:
+        # A producer that loaded the v1 CLI before the swap can still write v1 files after the last manual
+        # import: while the window is open the courier imports them each cycle, so they reach the v2 queues.
+        root = self.temp / "correio-v1"
+        queue = self.temp / "lease-queue.jsonl"
+        queue.write_text("")
+        self.opts.sync_v1_root, self.opts.sync_v1_jobs, self.opts.space = str(root), str(queue), "orq"
+
+        def v1_message(ident: str) -> None:
+            path = root / "inbox" / "orquestrador" / f"{ident}.json"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps({"id": ident, "from": "s606-preparer", "to": "orquestrador", "type": "ENTREGA",
+                                        "subject": "S606 tarde", "sentAt": "2026-10-25T15:00:00Z", "body": "x"}))
+
+        def v1_job(ident: str) -> None:
+            with queue.open("a") as out:
+                out.write(json.dumps({"id": ident, "kind": "gate", "who": "s606", "cmd": "x", "state": "queued",
+                                      "at": "2026-10-25T15:00:00Z"}) + "\n")
+        library.set_compat_v1(self.store, until=self.store.clock.iso(self.clock.t + 3600))
+        self.courier.cycle()
+        v1_message("20261025T150000000000Z-late0001")
+        v1_job("late1")
+        self.courier.cycle()
+        self.assertEqual(library.resolve_message(self.store, "20261025T150000000000Z-late0001", "orquestrador"),
+                         library.inbox(self.store, agent="orquestrador")["pending"][0]["id"])
+        self.assertIn("late1", [j["id"] for j in library.jobs_list(self.store)])
+        sync = library.compat_v1(self.store)["sync"]
+        self.assertEqual((sync["lastNew"] is not None, sync["imported"]["messages"]), (True, 1))
+        library.set_compat_v1(self.store, until=None)  # the window closed: no more imports
+        v1_message("20261025T160000000000Z-late0002")
+        v1_job("late2")
+        self.courier.cycle()
+        with self.assertRaises(library.CorreioError):
+            library.resolve_message(self.store, "20261025T160000000000Z-late0002", "orquestrador")
+        self.assertNotIn("late2", [j["id"] for j in library.jobs_list(self.store)])
+
     def test_failed_jobs_are_mailed_and_each_observer_seeds_on_its_own(self) -> None:
         self.courier.cycle()  # the agents observer seeds here, the jobs observers too
         job = library.jobs_add(self.store, kind="gate", who="s601", cmd="bash gate.sh")

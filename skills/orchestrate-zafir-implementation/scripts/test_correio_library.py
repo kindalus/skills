@@ -321,6 +321,15 @@ def _starter(db: str, job_id: str, barrier, queue) -> None:
 
 
 class JobsTest(CorreioCase):
+    def test_a_closed_queue_refuses_new_jobs_with_the_way_back(self) -> None:
+        library.jobs_add(self.store, kind="gate", who="s1", cmd="x")
+        library.jobs_close(self.store, "rollback: a fila voltou ao lease-queue.jsonl")
+        with self.assertRaisesRegex(CorreioError, "host queue is closed.*lease-queue.jsonl.*nothing was queued"):
+            library.jobs_add(self.store, kind="gate", who="s2", cmd="y")
+        self.assertEqual(len(library.jobs_list(self.store)), 1)
+        library.jobs_reopen(self.store)
+        library.jobs_add(self.store, kind="gate", who="s2", cmd="y")
+
     def test_two_simultaneous_starts_run_one_job(self) -> None:
         a = library.jobs_add(self.store, kind="gate", who="s601", cmd="true")
         b = library.jobs_add(self.store, kind="gate", who="s602", cmd="true")

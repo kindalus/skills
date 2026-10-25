@@ -236,7 +236,7 @@ def compat_v1(store: Store) -> dict[str, Any]:
     row = store.one("SELECT value FROM meta WHERE key=?", (COMPAT_V1,))
     until = row[0] if row else None
     end = parse_iso(until) if until else None
-    return {"until": until, "active": bool(end and end > store.clock.epoch())}
+    return {"until": until, "active": bool(end and end > store.clock.epoch()), "sync": store.observer("v1-sync")}
 
 
 def set_compat_v1(store: Store, *, until: str | None) -> dict[str, Any]:
@@ -790,6 +790,22 @@ def system_mail(store: Store, *, to: str, type: str, subject: str, body: str, th
 
 # -- host job queue ------------------------------------------------------------------------------------------------------------
 JOB_KINDS = {"gate", "lote", "janela"}
+JOBS_CLOSED = "jobs_closed"
+
+
+def jobs_close(store: Store, reason: str) -> dict[str, Any]:
+    """Barrier of a rollback: ``jobs add`` fails (and queues nothing) until ``jobs_reopen``."""
+    if not reason.strip():
+        raise CorreioError("jobs close needs a reason (where the queue went)")
+    with store.tx():
+        store.x("INSERT OR REPLACE INTO meta VALUES (?, ?)", (JOBS_CLOSED, reason))
+    return {"closed": reason}
+
+
+def jobs_reopen(store: Store) -> dict[str, Any]:
+    with store.tx():
+        store.x("DELETE FROM meta WHERE key=?", (JOBS_CLOSED,))
+    return {"closed": None}
 
 
 def _job(row: Any) -> dict[str, Any]:
@@ -804,6 +820,9 @@ def jobs_add(store: Store, *, kind: str, who: str, cmd: str, priority: int = 0, 
         raise CorreioError("job needs a command")
     job_id = job_id or uuid.uuid4().hex[:8]
     with store.tx():
+        closed = store.one("SELECT value FROM meta WHERE key=?", (JOBS_CLOSED,))
+        if closed:
+            raise CorreioError(f"the host queue is closed ({closed[0]}); nothing was queued")
         store.x("INSERT INTO jobs(id, kind, who, cmd, priority, state, at) VALUES (?,?,?,?,?,?,?)",
                 (job_id, kind, who, cmd, int(priority), "queued", at or store.now()))
         return _job(store.one("SELECT * FROM jobs WHERE id=?", (job_id,)))

@@ -290,6 +290,10 @@ def cmd_jobs(args: argparse.Namespace, store: Store) -> Any:
         return library.jobs_attach(store, args.job_id, args.pid)
     if args.jobs_command == "recover":
         return library.jobs_recover(store)
+    if args.jobs_command == "close":
+        return library.jobs_close(store, args.reason)
+    if args.jobs_command == "reopen":
+        return library.jobs_reopen(store)
     if args.jobs_command == "finish":
         return library.jobs_finish(store, args.job_id, args.exit)
     return library.jobs_list(store, everything=args.all, last=args.last)
@@ -303,7 +307,7 @@ def cmd_daemon(args: argparse.Namespace, store: Store) -> int:
         fetch_every=args.fetch_every, watch_runs=tuple(args.watch_runs), watch_jobs=tuple(args.watch_jobs),
         space=args.space, backup_dir=None if args.no_backup else (args.backup_dir or str(store.path.parent / "backups")),
         backup_keep=args.backup_keep, legacy_refresh=args.legacy_refresh, readonly=args.readonly,
-        only_kind=args.only_kind)
+        only_kind=args.only_kind, sync_v1_root=args.sync_v1_root, sync_v1_jobs=args.sync_v1_jobs)
     return daemon.run(store, daemon.Herdr(), options, interval=args.interval, once=args.once)
 
 
@@ -438,6 +442,9 @@ def build_parser() -> argparse.ArgumentParser:
         if name == "attach":
             p.add_argument("--pid", type=int, required=True, help="the process running the job's command")
     jobs.add_parser("recover", help="close running jobs whose command and runner are gone (exit -1)")
+    p = jobs.add_parser("close", help="rollback barrier: jobs add fails until reopen")
+    p.add_argument("--reason", required=True)
+    jobs.add_parser("reopen")
     p = jobs.add_parser("list")
     p.add_argument("--all", action="store_true")
     p.add_argument("--last", type=int)
@@ -451,6 +458,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--space", help="orchestration space for the courier's own mail")
     p.add_argument("--watch-to", default="orquestrador")
     p.add_argument("--done-pattern", default="")
+    p.add_argument("--sync-v1-root", metavar="DIR", help="while the v1 window is open, import this v1 mailbox each cycle")
+    p.add_argument("--sync-v1-jobs", metavar="JSONL", help="while the v1 window is open, import this v1 queue each cycle")
     p.add_argument("--only-kind", choices=["swarm"],
                    help="after a rollback to v1: deliver only swarm spaces, with no observers and no mail")
     p.add_argument("--readonly", default="", metavar="REGEX",
