@@ -224,7 +224,9 @@ def import_jobs(store: Store, path: pathlib.Path | str) -> dict[str, Any]:
     """``lease-queue.jsonl`` rows into ``jobs``, in file order; the file stays as it is."""
     counts = {"jobs": 0, "skipped": 0, "errors": []}
     with store.tx():
-        for n, line in enumerate(pathlib.Path(path).read_text(encoding="utf-8").splitlines(), 1):
+        with library.jsonl_lock(path):  # whole lines only: a v1 writer that takes the lock is never read halfway
+            text = pathlib.Path(path).read_text(encoding="utf-8")
+        for n, line in enumerate(text.splitlines(), 1):
             if not line.strip():
                 continue
             try:

@@ -162,6 +162,34 @@ class RollbackTest(TransitionCase):
         with self.assertRaisesRegex(library.CorreioError, "is not the receipt of"):
             library.export_v1(self.store, "orq", self.v1_root)
 
+    def test_a_v1_append_during_the_export_is_kept(self) -> None:
+        # The v1 producer (rollback/lease-queue-v1.sh add) appends under flock on <jsonl>.lock; the export reads
+        # and replaces the file under the same lock, so an append in between waits instead of being overwritten.
+        import fcntl
+        import threading
+        from unittest import mock
+        queue = self.temp / "lease-queue.jsonl"
+        queue.write_text("")
+        library.jobs_add(self.store, kind="gate", who="s1", cmd="x")
+        real_replace = os.replace
+
+        def v1_add() -> None:
+            with open(f"{queue}.lock", "a") as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                with queue.open("a") as out:
+                    out.write(json.dumps({"id": "v1late", "kind": "lote", "who": "s2", "cmd": "y",
+                                          "state": "queued", "at": "2026-10-26T00:00:00Z"}) + "\n")
+        producer = threading.Thread(target=v1_add)
+
+        def replace_after_a_v1_append(src, dst):
+            producer.start()
+            producer.join(0.5)  # the producer gets its turn now if nothing holds the lock
+            return real_replace(src, dst)
+        with mock.patch.object(library.os, "replace", replace_after_a_v1_append):
+            library.export_jobs(self.store, queue)
+        producer.join(5)
+        self.assertIn("v1late", [json.loads(line)["id"] for line in queue.read_text().splitlines()])
+
     def test_the_jobs_go_back_to_the_jsonl_queue_in_v1_order(self) -> None:
         queue = self.temp / "lease-queue.jsonl"
         rows = [{"id": "old1", "at": "2026-10-24T10:00:00Z", "kind": "gate", "who": "s601", "cmd": "a",

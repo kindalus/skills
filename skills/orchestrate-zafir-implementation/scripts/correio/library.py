@@ -7,6 +7,8 @@ the same transaction.
 """
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import hashlib
 import json
 import os
@@ -720,6 +722,22 @@ def export_v1(store: Store, space_id: str, root: os.PathLike[str] | str) -> dict
     return counts
 
 
+@contextlib.contextmanager
+def jsonl_lock(path: os.PathLike[str] | str) -> Iterable[None]:
+    """flock of ``<jsonl>.lock``, the lock the v1 queue script (rollback/lease-queue-v1.sh) takes to write."""
+    old_umask = os.umask(0o077)
+    try:
+        handle = open(f"{path}.lock", "a")
+    finally:
+        os.umask(old_umask)
+    with handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
 def export_jobs(store: Store, path: os.PathLike[str] | str) -> dict[str, Any]:
     """The ``jobs`` table back into the v1 JSONL queue, whose runner serves the first ``queued`` line: done
     jobs first, then the queued ones in v2 order (priority, then arrival), then lines only the file has (added
@@ -731,26 +749,27 @@ def export_jobs(store: Store, path: os.PathLike[str] | str) -> dict[str, Any]:
             raise CorreioError(f"job {running['id']} is running: wait for it (or jobs recover) before exporting")
         rows = [dict(r) for r in store.q("SELECT * FROM jobs ORDER BY state='queued', "
                                          "CASE WHEN state='queued' THEN -priority ELSE 0 END, seq")]
-    known = {r["id"] for r in rows}
-    extra = []
-    if path.is_file():
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if line.strip():
-                row = json.loads(line)
-                if str(row.get("id")) not in known:
-                    extra.append(row)
-    out = []
-    for r in rows:
-        state = r["state"] if r["state"] != "done" else (f"done exit={r['exit']}" if r["exit"] is not None else "done")
-        item = {"id": r["id"], "at": r["at"], "kind": r["kind"], "who": r["who"], "cmd": r["cmd"], "state": state}
-        for key, col in (("startedAt", "started_at"), ("endedAt", "ended_at")):
-            if r[col]:
-                item[key] = r[col]
-        out.append(item)
-    out += extra
-    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    tmp.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in out), encoding="utf-8")
-    os.replace(tmp, path)
+    with jsonl_lock(path):  # the v1 producers append under the same lock: none lands between read and replace
+        known = {r["id"] for r in rows}
+        extra = []
+        if path.is_file():
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    row = json.loads(line)
+                    if str(row.get("id")) not in known:
+                        extra.append(row)
+        out = []
+        for r in rows:
+            state = r["state"] if r["state"] != "done" else (f"done exit={r['exit']}" if r["exit"] is not None else "done")
+            item = {"id": r["id"], "at": r["at"], "kind": r["kind"], "who": r["who"], "cmd": r["cmd"], "state": state}
+            for key, col in (("startedAt", "started_at"), ("endedAt", "ended_at")):
+                if r[col]:
+                    item[key] = r[col]
+            out.append(item)
+        out += extra
+        tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+        tmp.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in out), encoding="utf-8")
+        os.replace(tmp, path)
     return {"file": str(path), "rows": len(out), "fromV2": len(rows), "keptFromFile": len(extra),
             "queued": [r["id"] for r in out if r["state"] == "queued"]}
 
