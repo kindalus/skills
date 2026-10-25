@@ -564,7 +564,7 @@ class SwarmV3Test(unittest.TestCase):
         principal = store.member("t123", "t123-principal")
         self.assertEqual(principal["pane_id"], first["principal"]["paneId"])
         prompt = self.log_entries("prompt")[-1]["message"]
-        self.assertIn(f"correio.py show {boots[0]['id']}", prompt)
+        self.assertRegex(prompt, rf"correio.py --db \S+ show {boots[0]['id']}")
         self.assertFalse((self.run_dir / "supervision" / "process.json").exists())
 
     def test_principal_bootstrap_requires_explicit_authority(self) -> None:
