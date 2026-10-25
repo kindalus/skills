@@ -58,7 +58,60 @@ def _slow_writer(db: str, sender: str, count: int, hold: float, start, queue) ->
         store.close()
 
 
+def _owner_that_forks_and_dies(db: str, how: str, out: str) -> None:
+    """Takes the write lock, leaves a child behind (fork, or fork+exec keeping inheritable fds), and dies."""
+    store = Store(db)
+    with store.tx():
+        if how == "hold":  # a child that ends at once must not free the lock its parent still holds
+            pid = os.fork()
+            if pid == 0:
+                os._exit(0)
+            os.waitpid(pid, 0)
+            pathlib.Path(out).write_text(str(pid))
+            import time
+            time.sleep(2)
+            os._exit(0)
+        if how == "fork":
+            pid = os.fork()
+            if pid == 0:
+                import time
+                time.sleep(5)
+                os._exit(0)
+        else:
+            pid = subprocess.Popen(["sleep", "5"], close_fds=False).pid
+        pathlib.Path(out).write_text(str(pid))
+        os._exit(0)  # the owner dies holding the lock; the kernel releases what it alone held
+
+
 class StoreTest(CorreioCase):
+    def test_a_child_left_by_a_dead_writer_does_not_keep_the_lock(self) -> None:
+        import time
+        for how in ("fork", "exec"):
+            with self.subTest(how=how):
+                ctx = multiprocessing.get_context("spawn")
+                out = self.temp / f"child-{how}"
+                owner = ctx.Process(target=_owner_that_forks_and_dies, args=(str(self.store.path), how, str(out)))
+                owner.start()
+                deadline = time.time() + 60
+                while owner.is_alive() and time.time() < deadline:  # not join(): the child inherits its sentinel
+                    time.sleep(0.05)
+                child = int(out.read_text())
+                start = time.time()
+                with self.store.tx():
+                    waited = time.time() - start
+                self.assertTrue(pathlib.Path(f"/proc/{child}").exists())  # the child is still alive...
+                self.assertLess(waited, 2.0)  # ...and the lock was free anyway
+        ctx = multiprocessing.get_context("spawn")
+        out = self.temp / "child-hold"
+        owner = ctx.Process(target=_owner_that_forks_and_dies, args=(str(self.store.path), "hold", str(out)))
+        owner.start()
+        while not out.exists():
+            time.sleep(0.02)
+        start = time.time()
+        with self.store.tx():
+            self.assertGreater(time.time() - start, 1.0)  # the parent kept its lock after the child closed its copy
+        owner.join(30)
+
     def test_writers_take_turns_when_one_burst_outlasts_the_busy_timeout(self) -> None:
         # SQLite's busy handler polls, so a writer in a tight loop re-takes the lock before a waiting one wakes:
         # the waiter starves for the other's whole burst and fails with "database is locked" past busy_timeout.

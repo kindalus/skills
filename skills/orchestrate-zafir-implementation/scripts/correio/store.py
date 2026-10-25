@@ -28,14 +28,28 @@ class CorreioError(RuntimeError):
 _WRITE_LOCKS: dict[str, list[Any]] = {}
 
 
+def _forget_inherited_locks() -> None:
+    """In a forked child: close the inherited lock descriptors and forget them, without LOCK_UN. The open file
+    description is shared with the parent, so an unlock here would free the parent's lock, and a copy kept
+    open would hold it after the parent dies. A child that unwinds the parent's ``with`` sees a dead entry."""
+    for entry in _WRITE_LOCKS.values():
+        if entry[0] is not None:
+            os.close(entry[0])
+            entry[0] = None
+    _WRITE_LOCKS.clear()
+
+
+os.register_at_fork(after_in_child=_forget_inherited_locks)
+
+
 @contextlib.contextmanager
 def _writer_turn(db: pathlib.Path) -> Iterator[None]:
     key = str(db.resolve()) + ".write.lock"
     entry = _WRITE_LOCKS.get(key)
     if entry is None:
         old_umask = os.umask(0o077)
-        try:
-            fd = os.open(key, os.O_RDWR | os.O_CREAT, 0o600)
+        try:  # O_CLOEXEC: an exec'd child never inherits it either
+            fd = os.open(key, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o600)
         finally:
             os.umask(old_umask)
         try:
@@ -49,10 +63,11 @@ def _writer_turn(db: pathlib.Path) -> Iterator[None]:
         yield
     finally:
         entry[1] -= 1
-        if entry[1] == 0:
+        if entry[1] == 0 and entry[0] is not None:  # None: forgotten in a forked child, nothing of ours to free
             del _WRITE_LOCKS[key]
             fcntl.flock(entry[0], fcntl.LOCK_UN)
             os.close(entry[0])
+            entry[0] = None
 
 
 def state_root() -> pathlib.Path:
