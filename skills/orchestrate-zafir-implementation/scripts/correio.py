@@ -179,9 +179,13 @@ def delay_for(attempts: int, minimum: float, ceiling: float) -> float:
     return min(ceiling, minimum * (2 ** min(32, max(0, attempts - 1))))  # cap the exponent: a float overflows past 2**1023
 
 
-def prompt_text(root: pathlib.Path, message: dict[str, Any], queued: int) -> str:
+def prompt_text(root: pathlib.Path, message: dict[str, Any], queued: int, readonly: bool = False) -> str:
     me = pathlib.Path(__file__).resolve()
     tail = f" (+{queued} na fila)" if queued else ""
+    if readonly:  # a sandboxed agent cannot write receipts or mail: the courier receipts, it answers in its text
+        return (f"Correio {message['type']} de {message['from']}: {message['subject']}{tail}. "
+                f"Lê {message['path']}. O recibo fica registado pelo estafeta. "
+                "Responde no teu texto final: o remetente lê-o do teu transcript.")
     return (f"Correio {message['type']} de {message['from']}: {message['subject']}{tail}. "
             f"Lê {message['path']}. Antes de agir, regista o recibo: "
             f"python3 {me} receipt --agent {message['to']} --id {message['id']} --disposition '<o que fazes>'. "
@@ -296,8 +300,16 @@ def cycle(root: pathlib.Path, state: dict[str, Any], retry_min: float, ceiling: 
         action = {"id": head["id"], "recipient": recipient, "status": status, "action": "wait"}
         if due and status in {"idle", "done"}:
             try:
-                herdr("agent", "prompt", recipient, prompt_text(root, head, len(pending) - 1), timeout=15)
+                readonly = bool(args and args.readonly and re.search(args.readonly, recipient))
+                herdr("agent", "prompt", recipient, prompt_text(root, head, len(pending) - 1, readonly), timeout=15)
                 action["action"] = "prompt"
+                if readonly:
+                    with contextlib.suppress(FileExistsError):
+                        write_atomic(root / "receipts" / recipient / f"{head['id']}.json",
+                                     {"schemaVersion": 1, "id": head["id"], "agent": recipient,
+                                      "messageSha256": sha256_file(pathlib.Path(head["path"])),
+                                      "disposition": "entregue a agente só de leitura (recibo do estafeta)",
+                                      "receiptedAt": now()})
             except Exception as error:  # noqa: BLE001 - the next due cycle retries
                 action["action"], action["error"] = "prompt-failed", str(error)[:300]
             record.update(attempts=int(record["attempts"]) + 1, lastAttemptEpoch=epoch, lastAttemptAt=stamp)
@@ -371,6 +383,7 @@ def main() -> None:
     p.add_argument("--max-backoff", type=float, default=480.0)
     p.add_argument("--watch-to", default="", help="agent that receives the observer mail (e.g. orquestrador)")
     p.add_argument("--done-pattern", default="", help="regex of agent names whose working→done/idle is mailed")
+    p.add_argument("--readonly", default="", help="regex of sandboxed agents: the courier receipts on delivery")
     p.add_argument("--quiet", default="porta-voz", help="comma list of agents whose transitions are not mailed")
     p.add_argument("--watch-ref", action="append", default=[], help="REPO:REF whose advance is mailed (repeatable)")
     p.add_argument("--fetch-every", type=float, default=60.0)
