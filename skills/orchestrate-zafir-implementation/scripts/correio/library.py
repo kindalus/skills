@@ -252,7 +252,7 @@ def resolve_message(store: Store, ref: str, agent: str | None = None) -> str:
     """A message id; an imported v1 id (``fields.legacyId``) of a message to ``agent`` also names it."""
     if store.message(ref) is not None:
         return ref
-    rows = store.q("SELECT id FROM messages WHERE json_extract(fields, '$.legacyId')=?"
+    rows = store.q("SELECT id FROM messages WHERE json_extract(fields, '$.legacyId')=? AND imported_from IS NOT NULL"
                    + (" AND to_agent=?" if agent else ""), (ref, agent) if agent else (ref,))
     if len(rows) == 1:
         return rows[0]["id"]
@@ -606,13 +606,27 @@ V1_TYPES = {"PEDIDO": "PEDIDO", "ENTREGA": "ENTREGA", "INFO": "INFO", "OWNER_QUE
 
 
 def v1_id(message: dict[str, Any]) -> str:
-    """The v1 id: the original one for an imported v1 message, else ``<sentAt as %Y%m%dT%H%M%S%fZ>-<8 hex>``."""
+    """The v1 id: the original one for a message imported from v1 (``imported_from`` and ``fields.legacyId``),
+    else ``<sentAt as %Y%m%dT%H%M%S%fZ>-<the whole UUID in hex>``, unambiguous by construction."""
     legacy = message["fields"].get("legacyId")
-    if isinstance(legacy, str) and re.fullmatch(r"[A-Za-z0-9._-]{1,128}", legacy):
+    if (message.get("imported_from") and isinstance(legacy, str)
+            and re.fullmatch(r"[A-Za-z0-9._-]{1,128}", legacy)):
         return legacy
     stamp = re.sub(r"[^0-9T]", "", message["sent_at"].split("+")[0].rstrip("Z"))
     date, _, clock = stamp.partition("T")
-    return f"{date}T{(clock + '000000000000')[:12]}Z-{message['id'].replace('-', '')[:8]}"
+    return f"{date}T{(clock + '000000000000')[:12]}Z-{message['id'].replace('-', '')}"
+
+
+def _v1_owner(path: pathlib.Path, message: dict[str, Any]) -> bool:
+    """Whether the v1 file at ``path`` is this message: the original v1 bytes it was imported from, or the file
+    an earlier export wrote for it."""
+    from . import legacy_v1
+    if message.get("imported_from") and message["fields"].get("legacySha256") == legacy_v1.sha256_file(path):
+        return True
+    try:
+        return (json.loads(path.read_text(encoding="utf-8")).get("correioV2") or {}).get("id") == message["id"]
+    except (OSError, ValueError, AttributeError):
+        return False
 
 
 def _v1_value(value: Any) -> Any:
@@ -638,12 +652,38 @@ def export_v1(store: Store, space_id: str, root: os.PathLike[str] | str) -> dict
     root = pathlib.Path(root).expanduser().resolve()
     counts: dict[str, Any] = {"space": space_id, "root": str(root), "messages": 0, "receipts": 0, "skipped": 0,
                               "errors": []}
-    for row in store.q("SELECT id FROM messages WHERE space_id=? ORDER BY sent_at, rowid", (space_id,)):
-        message = store.message(row["id"])
+    messages = [store.message(r["id"]) for r in store.q("SELECT id FROM messages WHERE space_id=? "
+                                                         "ORDER BY sent_at, rowid", (space_id,))]
+    # First every target and its owner, then the writes: a collision fails the whole export, before any write.
+    plan, seen, collisions = [], {}, []
+    for message in messages:
+        ident = v1_id(message)
+        path = root / "inbox" / message["to_agent"] / f"{ident}.json"
+        if path in seen:
+            collisions.append(f"{message['id']} and {seen[path]} both map to {path}")
+            continue
+        seen[path] = message["id"]
+        exists = path.exists()
+        if exists and not _v1_owner(path, message):
+            collisions.append(f"{path} exists and is not message {message['id']}")
+            continue
+        target = root / "receipts" / message["to_agent"] / f"{ident}.json"
+        if exists and target.exists():
+            try:
+                existing = json.loads(target.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                existing = {}
+            owner = existing.get("messageSha256") if isinstance(existing, dict) else None
+            if (not isinstance(existing, dict) or existing.get("id") != ident
+                    or owner is not None and owner != legacy_v1.sha256_file(path)):
+                collisions.append(f"{target} is not the receipt of {path}")
+                continue
+        plan.append((message, ident, path, target, exists))
+    if collisions:
+        raise CorreioError("v1 identity collision, nothing exported: " + "; ".join(collisions[:10]))
+    for message, ident, path, target, exists in plan:
         try:
-            ident = v1_id(message)
-            path = root / "inbox" / message["to_agent"] / f"{ident}.json"
-            if path.exists():
+            if exists:
                 counts["skipped"] += 1
             else:
                 payload = {k: _v1_value(v) for k, v in message["fields"].items()
@@ -666,14 +706,14 @@ def export_v1(store: Store, space_id: str, root: os.PathLike[str] | str) -> dict
                 legacy_v1.write_atomic(path, data)
                 counts["messages"] += 1
             receipt = store.receipt(message["id"])
-            target = root / "receipts" / message["to_agent"] / f"{ident}.json"
             if receipt and not target.exists():
                 disposition = receipt["disposition"] if receipt["accepted"] else f"recusada: {receipt['disposition']}"
                 legacy_v1.write_atomic(target, {
                     "schemaVersion": 1, "id": ident, "agent": message["to_agent"],
                     "messageSha256": legacy_v1.sha256_file(path), "disposition": disposition,
                     "receiptedAt": receipt["receipted_at"],
-                    "correioV2": {"accepted": receipt["accepted"], "receiptedBy": receipt.get("receipted_by")}})
+                    "correioV2": {"id": message["id"], "accepted": receipt["accepted"],
+                                  "receiptedBy": receipt.get("receipted_by")}})
                 counts["receipts"] += 1
         except (OSError, ValueError) as exc:
             counts["errors"].append({"id": message["id"], "error": str(exc)[:300]})

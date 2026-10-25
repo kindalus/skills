@@ -101,7 +101,7 @@ class RollbackTest(TransitionCase):
         inbox = self.v1_pending(empty, "orquestrador")
         native_v1 = self.store.message(native)["sent_at"]
         self.assertEqual(len(inbox), 4)  # the three unreceipted v1 imports and the v2 ENTREGA
-        self.assertTrue(any(i.endswith(native.replace("-", "")[:8]) for i in inbox), (inbox, native_v1))
+        self.assertTrue(any(i.endswith("-" + native.replace("-", "")) for i in inbox), (inbox, native_v1))
         self.assertEqual(self.v1_pending(empty, "s606-preparer"), [])  # receipted in v2: not asked again
         (question,) = self.v1_pending(empty, "porta-voz")
         shown = json.loads(self.cli("legacy", "show", "--agent", "porta-voz", "--id", question,
@@ -121,7 +121,7 @@ class RollbackTest(TransitionCase):
         self.assertEqual((first["messages"], first["receipts"]), (1, 1))  # the new ENTREGA; V1_OPEN's v2 receipt
         pending = self.v1_pending(self.v1_root, "orquestrador")
         self.assertNotIn(V1_OPEN, pending)
-        self.assertEqual(len([p for p in pending if p.endswith(native.replace("-", "")[:8])]), 1)
+        self.assertEqual(len([p for p in pending if p.endswith("-" + native.replace("-", ""))]), 1)
         self.assertTrue(set(before) <= set(files()))
         after = files()
         again = library.export_v1(self.store, "orq", self.v1_root)  # rerun after the CLI swap: only what is new
@@ -131,6 +131,36 @@ class RollbackTest(TransitionCase):
                              contract={"runId": "x"}, legacy=True)
         with self.assertRaisesRegex(library.CorreioError, "orchestration"):
             library.export_v1(self.store, "s900", self.temp / "x")
+
+    def test_a_legacy_id_is_trusted_only_from_an_import_and_a_collision_fails(self) -> None:
+        # A native message that carries the same legacyId as an imported one, to the same recipient, unreceipted.
+        imported = library.resolve_message(self.store, V1_OPEN, "orquestrador")
+        library.receipt(self.store, message_id=imported, agent="orquestrador", disposition="tratado")
+        native = self.send(sender="porta-voz", to="orquestrador", type="ENTREGA", subject="outra",
+                           fields={"legacyId": V1_OPEN})["id"]
+        self.assertEqual(library.resolve_message(self.store, V1_OPEN, "orquestrador"), imported)
+        out = self.temp / "v1-colisao"
+        library.export_v1(self.store, "orq", out)
+        pending = self.v1_pending(out, "orquestrador")
+        self.assertNotIn(V1_OPEN, pending)  # the imported one, receipted
+        self.assertIn(library.v1_id(self.store.message(native)), pending)  # the native one keeps its own id
+        receipt = json.loads((out / "receipts" / "orquestrador" / f"{V1_OPEN}.json").read_text())
+        self.assertEqual(receipt["correioV2"]["id"], imported)
+        # A file at the target that is another message: explicit failure, nothing written.
+        foreign = self.temp / "v1-alheia"
+        target = foreign / "inbox" / "orquestrador" / f"{V1_OPEN}.json"
+        target.parent.mkdir(parents=True)
+        target.write_text(json.dumps({"id": V1_OPEN, "from": "x", "to": "orquestrador", "type": "PEDIDO",
+                                      "subject": "outra coisa", "sentAt": "2026-10-25T00:00:00Z", "body": "?"}))
+        with self.assertRaisesRegex(library.CorreioError, "collision, nothing exported"):
+            library.export_v1(self.store, "orq", foreign)
+        self.assertEqual(sorted(p.name for p in foreign.rglob("*.json")), [f"{V1_OPEN}.json"])
+        # A receipt file that belongs to other bytes is a collision too.
+        library.export_v1(self.store, "orq", self.v1_root)
+        receipt_path = self.v1_root / "receipts" / "orquestrador" / f"{V1_OPEN}.json"
+        receipt_path.write_text(json.dumps({"id": V1_OPEN, "messageSha256": "0" * 64}))  # another file's
+        with self.assertRaisesRegex(library.CorreioError, "is not the receipt of"):
+            library.export_v1(self.store, "orq", self.v1_root)
 
     def test_the_jobs_go_back_to_the_jsonl_queue_in_v1_order(self) -> None:
         queue = self.temp / "lease-queue.jsonl"
