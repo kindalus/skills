@@ -297,6 +297,32 @@ class ObserverTest(CourierCase):
         (mail,) = self.mails("PEDIDO")
         self.assertEqual(mail["subject"], "swarm s900: evento parado")
 
+    def test_legacy_events_to_the_orchestrator_are_mailed_after_a_silent_seed(self) -> None:
+        # swarmd 2.7 never prompts the orchestrator, so its BLOCKED waits unseen unless mailed (v1 6fa721c).
+        runs = self.temp / "legacy-runs"
+        status = runs / "s617" / "supervision" / "status.json"
+        status.parent.mkdir(parents=True)
+
+        def pending(*events):
+            status.write_text(json.dumps({"terminal": False, "pending": [
+                {"id": eid, "type": kind, "to": to, "sentAt": self.store.clock.iso(self.clock.t - age),
+                 "path": f"/runs/s617/inbox/{to}/{eid}.json"} for eid, kind, to, age in events]}))
+        pending(("old", "BLOCKED", "orquestrador", 900))
+        self.opts.watch_runs = (str(runs),)
+        self.courier.cycle()  # seed: what was already stuck is not mailed
+        self.assertEqual(self.mails(), [])
+        pending(("old", "BLOCKED", "orquestrador", 910), ("new", "LEASE_REQUEST", "orquestrador", 10),
+                ("rev", "REVIEW_REQUEST", "s617-reviewer", 10))
+        self.courier.cycle()
+        self.assertEqual(self.mails(), [])
+        self.clock.advance(121)
+        pending(("old", "BLOCKED", "orquestrador", 1031), ("new", "LEASE_REQUEST", "orquestrador", 131),
+                ("rev", "REVIEW_REQUEST", "s617-reviewer", 131))
+        self.courier.cycle()
+        self.courier.cycle()
+        self.assertEqual(sorted(m["subject"] for m in self.mails("PEDIDO")),
+                         ["swarm s617: LEASE_REQUEST para ti", "swarm s617: evento parado"])
+
     def test_failed_jobs_are_mailed_and_each_observer_seeds_on_its_own(self) -> None:
         self.courier.cycle()  # the agents observer seeds here, the jobs observers too
         job = library.jobs_add(self.store, kind="gate", who="s601", cmd="bash gate.sh")

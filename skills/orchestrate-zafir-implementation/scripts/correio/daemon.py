@@ -327,12 +327,15 @@ class Courier:
                     sent = parse_iso(event.get("sentAt"))
                     key = f"{status_path.parent.parent.name}:{event.get('id')}"
                     pending.add(key)
-                    if (sent is None or now - sent <= self.opts.stuck_after or key in warned
-                            or event.get("to") == self.opts.watch_to):
+                    if sent is None or now - sent <= self.opts.stuck_after or key in warned:
                         continue
                     warned[key] = self.store.now()
                     if not first:
-                        self.mail("PEDIDO", f"swarm {status_path.parent.parent.name}: evento parado",
+                        # swarmd never prompts the orchestrator, so its own events surface here as mail (v1 6fa721c).
+                        mine = event.get("to") == self.opts.watch_to
+                        run = status_path.parent.parent.name
+                        self.mail("PEDIDO", f"swarm {run}: {event.get('type')} para ti" if mine
+                                  else f"swarm {run}: evento parado",
                                   f"{event.get('type')} para {event.get('to')} sem recibo há {int(now - sent)} s: "
                                   f"{event.get('path')}", "correio/swarms")
         state["warned"] = {k: v for k, v in warned.items() if k in pending}
