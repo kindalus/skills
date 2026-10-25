@@ -24,6 +24,9 @@ CLI = f"python3 {SCRIPTS / 'correio.py'}"
 SPACE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 ROLE = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
 MAX_DISPOSITION = 1000
+# The courier's receipt for an agent that cannot write one (a read-only sandbox), after a delivered prompt.
+READONLY_DISPOSITION = "entregue a agente só de leitura (recibo do estafeta)"
+SERVICE_RECEIPTERS = {"correio"}
 
 
 def sha256_file(path: os.PathLike[str] | str) -> str:
@@ -317,7 +320,11 @@ def send(store: Store, *, space: str, sender: str, to: str, type: str, thread: s
 
 
 def receipt(store: Store, *, message_id: str, agent: str, disposition: str, accepted: bool = True,
-            check_pane: bool = True) -> dict[str, Any]:
+            check_pane: bool = True, by: str | None = None) -> dict[str, Any]:
+    """``agent`` is the recipient; ``by`` names a service that receipts for it (only the courier, for a
+    read-only agent), recorded in ``receipted_by``."""
+    if by is not None and by not in SERVICE_RECEIPTERS:
+        raise CorreioError(f"only {sorted(SERVICE_RECEIPTERS)} receipt for another agent")
     if not isinstance(disposition, str) or not disposition.strip():
         raise CorreioError("receipt requires a nonempty disposition")
     if len(disposition) > MAX_DISPOSITION:
@@ -330,7 +337,7 @@ def receipt(store: Store, *, message_id: str, agent: str, disposition: str, acce
         module = protocol_of(sp)
         if message["to_agent"] != agent:
             raise CorreioError("receipt actor is not the message recipient")
-        if check_pane:
+        if check_pane and by is None:
             verify_pane(store.members(sp["id"], include_left=True), agent, sp["id"])
         new = {"message_id": message_id, "agent": agent, "accepted": bool(accepted), "disposition": disposition,
                "message_sha256": message["sha256"], "receipted_at": store.now()}
@@ -344,9 +351,10 @@ def receipt(store: Store, *, message_id: str, agent: str, disposition: str, acce
             module.validate_receipt(sp, message, new, store)
         except ValueError as exc:
             raise CorreioError(str(exc)) from exc
-        store.x("INSERT INTO receipts(message_id, agent, accepted, disposition, message_sha256, receipted_at) "
-                "VALUES (?,?,?,?,?,?)", (message_id, agent, int(new["accepted"]), disposition, new["message_sha256"],
-                                         new["receipted_at"]))
+        store.x("INSERT INTO receipts(message_id, agent, accepted, disposition, message_sha256, receipted_at, "
+                "receipted_by) VALUES (?,?,?,?,?,?,?)", (message_id, agent, int(new["accepted"]), disposition,
+                                                         new["message_sha256"], new["receipted_at"], by))
+        new["receipted_by"] = by
         if new["accepted"] and message["delivery"] == "wake":
             module.project(sp, message, new, store)
         _apply_close(store, sp, module)

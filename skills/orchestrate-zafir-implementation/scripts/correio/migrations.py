@@ -126,6 +126,11 @@ CREATE TRIGGER messages_fts_insert AFTER INSERT ON messages
 BEGIN INSERT INTO messages_fts(rowid, subject, body) VALUES (NEW.rowid, NEW.subject, NEW.body); END;
 """
 
+# Version 2: who wrote a receipt when it was not the recipient (the courier, for a read-only agent).
+SCHEMA_V2 = """
+ALTER TABLE receipts ADD COLUMN receipted_by TEXT;
+"""
+
 # (version, statements); FTS is added with version 1 when the sqlite build has FTS5.
-STEPS = [(1, SCHEMA_V1)]
+STEPS = [(1, SCHEMA_V1), (2, SCHEMA_V2)]
 LATEST = STEPS[-1][0]

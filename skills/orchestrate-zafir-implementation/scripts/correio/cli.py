@@ -234,7 +234,9 @@ def cmd_show(args: argparse.Namespace, store: Store) -> Any:
         return None
     receipt = result["receipt"]
     tail = ["", f"# recibo: {'nenhum' if not receipt else ('aceite' if receipt['accepted'] else 'recusada')}"
-            + (f" por {receipt['agent']} em {receipt['receipted_at']}: {receipt['disposition']}" if receipt else "")]
+            + (f" por {receipt['agent']}" + (f" (registado por {receipt['receipted_by']})"
+                                              if receipt.get("receipted_by") else "")
+               + f" em {receipt['receipted_at']}: {receipt['disposition']}" if receipt else "")]
     for item in result["attachments"]:
         tail.append(f"# anexo {item['path']}: {'inalterado' if item['unchanged'] else 'ALTERADO OU EM FALTA'}")
     if result["replies"]:
@@ -271,7 +273,7 @@ def cmd_daemon(args: argparse.Namespace, store: Store) -> int:
         quiet=tuple(filter(None, args.quiet.split(","))), watch_ref=tuple(args.watch_ref),
         fetch_every=args.fetch_every, watch_runs=tuple(args.watch_runs), watch_jobs=tuple(args.watch_jobs),
         space=args.space, backup_dir=None if args.no_backup else (args.backup_dir or str(store.path.parent / "backups")),
-        backup_keep=args.backup_keep, legacy_refresh=args.legacy_refresh)
+        backup_keep=args.backup_keep, legacy_refresh=args.legacy_refresh, readonly=args.readonly)
     return daemon.run(store, daemon.Herdr(), options, interval=args.interval, once=args.once)
 
 
@@ -407,6 +409,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--space", help="orchestration space for the courier's own mail")
     p.add_argument("--watch-to", default="orquestrador")
     p.add_argument("--done-pattern", default="")
+    p.add_argument("--readonly", default="", metavar="REGEX",
+                   help="read-only (sandboxed) agents: the courier writes their copy and receipts after the prompt")
     p.add_argument("--quiet", default="porta-voz")
     p.add_argument("--watch-ref", action="append", default=[], metavar="REPO:REF")
     p.add_argument("--fetch-every", type=float, default=60.0)

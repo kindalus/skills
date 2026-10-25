@@ -77,6 +77,7 @@ class Options:
     backup_dir: str | None = None
     backup_keep: int = 14
     legacy_refresh: float = 300.0
+    readonly: str = ""  # regex of read-only (sandboxed) agents: the courier receipts for them after the prompt
     cli: str = library.CLI
 
 
@@ -166,6 +167,27 @@ class Courier:
             "AND m.from_agent<>m.to_agent ORDER BY m.sent_at, m.rowid")
         return [self.store.message(r["id"]) for r in rows]
 
+    def readonly(self, agent: str, module: Any) -> bool:
+        """A read-only recipient, in a protocol whose receipts project nothing (never a swarm)."""
+        return bool(self.opts.readonly and re.search(self.opts.readonly, agent)
+                    and getattr(module, "READONLY_RECEIPTS", False))
+
+    def readonly_copy(self, message: dict[str, Any]) -> pathlib.Path:
+        """The envelope's exact bytes in a file a read-only agent can read (it cannot open the database)."""
+        directory = self.store.path.parent / "leitura" / message["to_agent"]
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        target = directory / f"{message['id']}.md"
+        if not target.is_file() or target.read_bytes() != message["envelope"]:
+            tmp = directory / f".{message['id']}.{os.getpid()}.tmp"
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(message["envelope"])
+            os.replace(tmp, target)
+        return target
+
+    def unread_info_messages(self, agent: str, space_id: str) -> list[dict[str, Any]]:
+        return library._unreceipted(self.store, agent=agent, space=space_id, delivery="info")
+
     def unread_info(self, agent: str) -> int:
         row = self.store.one(
             "SELECT COUNT(*) FROM messages m JOIN spaces s ON s.id=m.space_id LEFT JOIN receipts r ON "
@@ -218,12 +240,26 @@ class Courier:
                     action["action"] = "already-receipted"
                 else:
                     module = library.protocol_of(space)
-                    text = module.prompt(head, len(queue) - 1, self.unread_info(agent_name), cli=self.opts.cli)
+                    readonly = self.readonly(agent_name, module)
+                    infos = self.unread_info_messages(agent_name, space["id"]) if readonly else []
+                    if readonly:
+                        copy = str(self.readonly_copy(head))
+                        for info in infos:
+                            self.readonly_copy(info)
+                        text = module.prompt(head, len(queue) - 1, len(infos), cli=self.opts.cli, copy=copy)
+                    else:
+                        text = module.prompt(head, len(queue) - 1, self.unread_info(agent_name), cli=self.opts.cli)
                     try:
                         self.herdr.prompt(target, text)
                         action["action"] = "prompt"
                     except HerdrError as exc:
                         action.update(action="prompt-failed", error=str(exc)[:300])
+                    else:
+                        if readonly:  # it cannot write its receipt: the courier records it, marked as its own
+                            for message in [head, *infos]:
+                                library.receipt(self.store, message_id=message["id"], agent=agent_name,
+                                                disposition=library.READONLY_DISPOSITION, by="correio")
+                            action["action"] = "prompt-readonly"
                     attempts += 1
                     last = now
             elif due and status in {"blocked", "absent"}:

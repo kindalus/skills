@@ -110,6 +110,47 @@ class DeliveryTest(CourierCase):
         self.assertIn(f"correio show {sent}", mail)
         self.assertIn(f"REVIEW_REQUEST {event} from s900-principal", swarm)
 
+    def test_a_read_only_agent_is_receipted_by_the_courier_after_its_prompt(self) -> None:
+        # A sandboxed consultant can neither open the database nor write its receipt (v1 3f35d63).
+        self.opts.readonly = "^consultor-"
+        info = self.send(sender="orquestrador", to="consultor-claude", type="INFO", subject="contexto")["id"]
+        first = self.send(sender="orquestrador", to="consultor-claude", subject="revê o plano")["id"]
+        self.clock.advance(1)
+        second = self.send(sender="orquestrador", to="consultor-claude", subject="e o resto")["id"]
+        self.herdr.fail.add("consultor-claude")
+        self.courier.cycle()
+        self.assertIsNone(self.store.receipt(first))  # no receipt without a delivered prompt
+        self.herdr.fail.clear()
+        self.clock.advance(30)
+        self.courier.cycle()
+        (prompt,) = self.prompts_to("consultor-claude")
+        copy = self.store.path.parent / "leitura" / "consultor-claude" / f"{first}.md"
+        self.assertEqual(copy.read_bytes(), self.store.message(first)["envelope"])
+        self.assertEqual(oct(copy.stat().st_mode & 0o777), "0o600")
+        self.assertIn(f"PEDIDO {first} de orquestrador", prompt)
+        self.assertIn(f"Lê {copy}", prompt)
+        self.assertIn("Responde no teu texto final", prompt)
+        self.assertNotIn("receipt --agent", prompt)
+        self.assertNotIn("revê o plano", prompt)
+        self.assertIn("+1 INFO", prompt)
+        for mid in (first, info):
+            receipt = self.store.receipt(mid)
+            self.assertEqual((receipt["agent"], receipt["accepted"], receipt["receipted_by"], receipt["disposition"]),
+                             ("consultor-claude", True, "correio", library.READONLY_DISPOSITION))
+        self.assertTrue((copy.parent / f"{info}.md").is_file())
+        self.courier.cycle()  # the receipt frees the queue at once
+        self.assertIn(second, self.prompts_to("consultor-claude")[1])
+        # Other agents and swarm spaces keep their own receipts.
+        other = self.send(sender="orquestrador", to="s606-preparer")["id"]
+        self.courier.cycle()
+        self.assertIsNone(self.store.receipt(other))
+        self.swarm()
+        self.opts.readonly = "^s900-"
+        event = self.swarm_event("s900-principal", "s900-reviewer", "REVIEW_REQUEST", taskId="S900-T01",
+                                 assignmentId="a1", revision=1, candidateSha="a" * 40)
+        self.courier.cycle()
+        self.assertIsNone(self.store.receipt(event))
+
     def test_backoff_survives_long_retry_runs(self) -> None:
         self.assertEqual(daemon.delay_for(1025, 30.0, 480.0), 480.0)  # 2**1024 overflowed a float
         self.assertEqual(daemon.delay_for(10 ** 6, 30.0, 480.0), 480.0)

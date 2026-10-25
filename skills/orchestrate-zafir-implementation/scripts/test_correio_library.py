@@ -12,7 +12,7 @@ import subprocess
 import sys
 import unittest
 
-from correio import library, protocols
+from correio import library, migrations, protocols
 from correio.store import CorreioError, Store
 from correio_testing import CorreioCase
 
@@ -41,7 +41,9 @@ class StoreTest(CorreioCase):
         self.assertEqual(con.execute("PRAGMA foreign_keys").fetchone()[0], 1)
         self.assertEqual(stat.S_IMODE(self.store.path.stat().st_mode), 0o600)
         self.assertEqual(stat.S_IMODE(self.store.path.parent.stat().st_mode), 0o700)
-        self.assertEqual(con.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()[0], "1")
+        self.assertEqual(con.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()[0],
+                         str(migrations.LATEST))
+        self.assertIn("receipted_by", [row[1] for row in con.execute("PRAGMA table_info(receipts)")])
         Store(self.store.path).close()  # reopening migrates nothing twice
 
     def test_messages_and_receipts_are_immutable(self) -> None:
