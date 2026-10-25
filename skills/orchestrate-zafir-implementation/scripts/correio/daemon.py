@@ -81,7 +81,7 @@ class Options:
 
 
 def delay_for(attempts: int, minimum: float, ceiling: float) -> float:
-    return min(ceiling, minimum * (2 ** max(0, attempts - 1)))
+    return min(ceiling, minimum * (2 ** min(32, max(0, attempts - 1))))  # cap the exponent: a float overflows past 2**1023
 
 
 def resolve_agent(listed: list[dict[str, Any]], name: str, member: dict[str, Any] | None

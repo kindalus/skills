@@ -90,6 +90,18 @@ class DeliveryTest(CourierCase):
         row = self.store.one("SELECT attempts, last_action FROM deliveries WHERE message_id=?", (sent,))
         self.assertEqual((row["attempts"], row["last_action"]), (8, "prompt"))
 
+    def test_backoff_survives_long_retry_runs(self) -> None:
+        self.assertEqual(daemon.delay_for(1025, 30.0, 480.0), 480.0)  # 2**1024 overflowed a float
+        self.assertEqual(daemon.delay_for(10 ** 6, 30.0, 480.0), 480.0)
+        sent = self.send(sender="orquestrador", to="s606-preparer")["id"]
+        self.store.x("INSERT INTO deliveries(message_id, attempts, last_attempt_epoch) VALUES (?,?,?)",
+                     (sent, 5000, self.clock.t - 481))
+        later = self.send(sender="orquestrador", to="porta-voz")["id"]
+        report = self.courier.cycle()
+        self.assertEqual(report["errors"], [])
+        self.assertEqual([a["action"] for a in report["actions"]], ["prompt", "prompt"])
+        self.assertIn(later, self.prompts_to("porta-voz")[0])
+
     def test_working_waits_blocked_and_absent_are_notified(self) -> None:
         self.send(sender="orquestrador", to="s606-preparer")
         self.herdr.set("s606-preparer", "working")
