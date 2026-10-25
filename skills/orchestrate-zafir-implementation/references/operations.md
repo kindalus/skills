@@ -67,7 +67,7 @@ Evidence stays in files; messages cite it by path and sha256. When a slice close
 
 **Cutover from v1:** an imported v1 message keeps its v1 id in `fields.legacyId`, and `receipt --agent <you> --id <v1 id>` and `show --agent <you> --id <v1 id>` accept it. The v1 form of `send` (no `--thread`, structure in `--payload-file`) works only inside the window `correio compat v1 --hours <n>` opens (the thread is inferred from the slice and request in the text, with a warning; `--off` closes it); outside it, it fails with the v2 form and sends nothing.
 
-**Rollback:** the v1 file mailbox still runs as `correio.py legacy <send|receipt|pending|show|daemon>`.
+**Rollback:** the v1 file mailbox still runs as `correio.py legacy <send|receipt|pending|show|daemon>`. `correio export-v1 --space orq --root <v1 correio/>` converts the orchestration space back into that mailbox, adding only the messages and receipts it lacks (receipted in v2 is receipted in v1); `correio export-jobs --file <lease-queue.jsonl>` writes the queue back in v1 order and keeps lines only the file has. Both can be rerun after the swap back. Open v3 swarm runs stay on correio, carried by `correio daemon --only-kind swarm` (delivery and escalation notifications only) until they close.
 
 ## Owner questions
 

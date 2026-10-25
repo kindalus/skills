@@ -77,6 +77,7 @@ class Options:
     backup_dir: str | None = None
     backup_keep: int = 14
     legacy_refresh: float = 300.0
+    only_kind: str | None = None  # "swarm" after a rollback: carry only the open v3 runs, no observers or mail
     readonly: str = ""  # regex of read-only (sandboxed) agents: the courier receipts for them after the prompt
     cli: str = library.CLI
 
@@ -147,6 +148,8 @@ class Courier:
         return self.store.clock.epoch()
 
     def mail(self, kind: str, subject: str, body: str, thread: str) -> None:
+        if self.opts.only_kind:  # the orchestration team reads the v1 mailbox again: no mail into correio
+            return
         with contextlib.suppress(CorreioError):
             library.system_mail(self.store, to=self.opts.watch_to, type=kind, subject=subject, body=body,
                                 thread=thread, space=self.opts.space)
@@ -164,7 +167,8 @@ class Courier:
         rows = self.store.q(
             "SELECT m.id FROM messages m JOIN spaces s ON s.id=m.space_id LEFT JOIN receipts r ON r.message_id=m.id "
             "WHERE r.message_id IS NULL AND s.legacy=0 AND s.closed_at IS NULL AND m.delivery='wake' "
-            "AND m.from_agent<>m.to_agent ORDER BY m.sent_at, m.rowid")
+            "AND m.from_agent<>m.to_agent AND (? IS NULL OR s.kind=?) ORDER BY m.sent_at, m.rowid",
+            (self.opts.only_kind, self.opts.only_kind))
         return [self.store.message(r["id"]) for r in rows]
 
     def readonly(self, agent: str, module: Any) -> bool:
@@ -206,9 +210,11 @@ class Courier:
         steps = [("escalate", self.escalate), ("swarm-stuck", self.observe_swarm_stuck),
                  ("jobs", self.observe_jobs), ("refs", self.observe_refs), ("legacy", self.observe_legacy),
                  ("backup", self.maybe_backup), ("legacy-refresh", self.maybe_refresh_legacy)]
+        if self.opts.only_kind:  # rollback: the v1 courier observes; this one only delivers and escalates
+            steps = [("escalate", self.escalate), ("backup", self.maybe_backup)]
         if listed is not None:
-            steps = [("agents", lambda: self.observe_agents(listed)),
-                     ("deliver", lambda: report["actions"].extend(self.deliver(listed)))] + steps
+            steps = ([] if self.opts.only_kind else [("agents", lambda: self.observe_agents(listed))]) + [
+                ("deliver", lambda: report["actions"].extend(self.deliver(listed)))] + steps
         for name, step in steps:
             try:
                 step()

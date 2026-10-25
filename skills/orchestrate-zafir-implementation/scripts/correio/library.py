@@ -597,6 +597,121 @@ def export_space(store: Store, space_id: str, out: os.PathLike[str] | str) -> di
     return {"space": space_id, "out": str(out), "messages": len(rows), "sha256sums": sha256_file(out / "SHA256SUMS")}
 
 
+# -- rollback to v1 -----------------------------------------------------------------------------------------------------
+V1_TYPES = {"PEDIDO": "PEDIDO", "ENTREGA": "ENTREGA", "INFO": "INFO", "OWNER_QUESTION": "PEDIDO",
+            "OWNER_ANSWER": "ENTREGA"}
+
+
+def v1_id(message: dict[str, Any]) -> str:
+    """The v1 id: the original one for an imported v1 message, else ``<sentAt as %Y%m%dT%H%M%S%fZ>-<8 hex>``."""
+    legacy = message["fields"].get("legacyId")
+    if isinstance(legacy, str) and re.fullmatch(r"[A-Za-z0-9._-]{1,128}", legacy):
+        return legacy
+    stamp = re.sub(r"[^0-9T]", "", message["sent_at"].split("+")[0].rstrip("Z"))
+    date, _, clock = stamp.partition("T")
+    return f"{date}T{(clock + '000000000000')[:12]}Z-{message['id'].replace('-', '')[:8]}"
+
+
+def _v1_value(value: Any) -> Any:
+    if isinstance(value, str) and value[:1] in "[{":
+        try:
+            return json.loads(value)
+        except ValueError:
+            return value
+    return value
+
+
+def export_v1(store: Store, space_id: str, root: os.PathLike[str] | str) -> dict[str, Any]:
+    """Convert an orchestration space back into a v1 mailbox (``inbox/<to>/<id>.json`` and ``receipts/``) that the
+    v1 CLI and courier read. Into the live v1 root it adds only what is missing: a file that exists is never
+    rewritten, so a rerun after the CLI swap picks up just the mail and receipts written in between. Receipted
+    in v2 means receipted in v1 (a rejection keeps its verdict in the disposition), so nothing handled comes
+    back and nothing unhandled is lost."""
+    from . import legacy_v1
+    sp = _space(store, space_id)
+    if sp["kind"] != "orchestration":
+        raise CorreioError(f"{space_id} is a {sp['kind']} space: only orchestration mail goes back to v1; "
+                           "v3 swarm runs finish on correio (CUTOVER.md, rollback)")
+    root = pathlib.Path(root).expanduser().resolve()
+    counts: dict[str, Any] = {"space": space_id, "root": str(root), "messages": 0, "receipts": 0, "skipped": 0,
+                              "errors": []}
+    for row in store.q("SELECT id FROM messages WHERE space_id=? ORDER BY sent_at, rowid", (space_id,)):
+        message = store.message(row["id"])
+        try:
+            ident = v1_id(message)
+            path = root / "inbox" / message["to_agent"] / f"{ident}.json"
+            if path.exists():
+                counts["skipped"] += 1
+            else:
+                payload = {k: _v1_value(v) for k, v in message["fields"].items()
+                           if k not in {"legacyId", "legacySha256"}}
+                attachments = [dict(a) for a in store.q("SELECT path, sha256, bytes FROM attachments WHERE "
+                                                        "message_id=? ORDER BY path", (message["id"],))]
+                body = message["body"] + ("".join(f"\n- anexo: {a['path']} (sha256 {a['sha256']})"
+                                                  for a in attachments) if attachments else "")
+                data: dict[str, Any] = {
+                    "schemaVersion": 1, "id": ident, "from": message["from_agent"], "to": message["to_agent"],
+                    "type": V1_TYPES.get(message["type"], "PEDIDO"), "subject": message["subject"],
+                    "sentAt": message["sent_at"], "body": body,
+                    "correioV2": {"id": message["id"], "space": space_id, "thread": message["thread"],
+                                  "type": message["type"], "sha256": message["sha256"],
+                                  "inReplyTo": message["in_reply_to"]}}
+                if payload:
+                    data["payload"] = payload
+                if attachments:
+                    data["attachments"] = attachments
+                legacy_v1.write_atomic(path, data)
+                counts["messages"] += 1
+            receipt = store.receipt(message["id"])
+            target = root / "receipts" / message["to_agent"] / f"{ident}.json"
+            if receipt and not target.exists():
+                disposition = receipt["disposition"] if receipt["accepted"] else f"recusada: {receipt['disposition']}"
+                legacy_v1.write_atomic(target, {
+                    "schemaVersion": 1, "id": ident, "agent": message["to_agent"],
+                    "messageSha256": legacy_v1.sha256_file(path), "disposition": disposition,
+                    "receiptedAt": receipt["receipted_at"],
+                    "correioV2": {"accepted": receipt["accepted"], "receiptedBy": receipt.get("receipted_by")}})
+                counts["receipts"] += 1
+        except (OSError, ValueError) as exc:
+            counts["errors"].append({"id": message["id"], "error": str(exc)[:300]})
+    return counts
+
+
+def export_jobs(store: Store, path: os.PathLike[str] | str) -> dict[str, Any]:
+    """The ``jobs`` table back into the v1 JSONL queue, whose runner serves the first ``queued`` line: done
+    jobs first, then the queued ones in v2 order (priority, then arrival), then lines only the file has (added
+    by the v1 script after the swap back). Refused while a job runs; rerunning it merges again."""
+    path = pathlib.Path(path)
+    with store.tx():
+        running = _running(store)
+        if running:
+            raise CorreioError(f"job {running['id']} is running: wait for it (or jobs recover) before exporting")
+        rows = [dict(r) for r in store.q("SELECT * FROM jobs ORDER BY state='queued', "
+                                         "CASE WHEN state='queued' THEN -priority ELSE 0 END, seq")]
+    known = {r["id"] for r in rows}
+    extra = []
+    if path.is_file():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                row = json.loads(line)
+                if str(row.get("id")) not in known:
+                    extra.append(row)
+    out = []
+    for r in rows:
+        state = r["state"] if r["state"] != "done" else (f"done exit={r['exit']}" if r["exit"] is not None else "done")
+        item = {"id": r["id"], "at": r["at"], "kind": r["kind"], "who": r["who"], "cmd": r["cmd"], "state": state}
+        for key, col in (("startedAt", "started_at"), ("endedAt", "ended_at")):
+            if r[col]:
+                item[key] = r[col]
+        out.append(item)
+    out += extra
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    tmp.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in out), encoding="utf-8")
+    os.replace(tmp, path)
+    return {"file": str(path), "rows": len(out), "fromV2": len(rows), "keptFromFile": len(extra),
+            "queued": [r["id"] for r in out if r["state"] == "queued"]}
+
+
 # -- system mail ------------------------------------------------------------------------------------------------------------
 def system_mail(store: Store, *, to: str, type: str, subject: str, body: str, thread: str,
                 space: str | None = None) -> dict[str, Any] | None:

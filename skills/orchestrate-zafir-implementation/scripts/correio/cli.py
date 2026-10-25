@@ -2,7 +2,8 @@
 
   space create|close|show|list      member add|update|leave
   send                              receipt (one, or --all-info)
-  inbox, show, thread, open, search export, import-files, import-run, import-jobs
+  inbox, show, thread, open, search export, import-files, import-run, import-jobs, compat
+  export-v1, export-jobs            rollback: back to the v1 mailbox and the JSONL queue
   jobs add|next|start|attach|finish|recover|list   daemon, watchdog, backup
   legacy <v1 subcommand>            the v1 file mailbox, kept for rollback
 
@@ -301,7 +302,8 @@ def cmd_daemon(args: argparse.Namespace, store: Store) -> int:
         quiet=tuple(filter(None, args.quiet.split(","))), watch_ref=tuple(args.watch_ref),
         fetch_every=args.fetch_every, watch_runs=tuple(args.watch_runs), watch_jobs=tuple(args.watch_jobs),
         space=args.space, backup_dir=None if args.no_backup else (args.backup_dir or str(store.path.parent / "backups")),
-        backup_keep=args.backup_keep, legacy_refresh=args.legacy_refresh, readonly=args.readonly)
+        backup_keep=args.backup_keep, legacy_refresh=args.legacy_refresh, readonly=args.readonly,
+        only_kind=args.only_kind)
     return daemon.run(store, daemon.Herdr(), options, interval=args.interval, once=args.once)
 
 
@@ -404,6 +406,11 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("export")
     p.add_argument("--space", required=True)
     p.add_argument("--out", required=True)
+    p = sub.add_parser("export-v1", help="rollback: an orchestration space back into a v1 mailbox")
+    p.add_argument("--space", required=True)
+    p.add_argument("--root", required=True, help="the v1 correio/ root (adds only what is missing)")
+    p = sub.add_parser("export-jobs", help="rollback: the jobs table back into the v1 JSONL queue (merges)")
+    p.add_argument("--file", required=True)
     p = sub.add_parser("import-files")
     p.add_argument("--root", required=True)
     p.add_argument("--space")
@@ -444,6 +451,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--space", help="orchestration space for the courier's own mail")
     p.add_argument("--watch-to", default="orquestrador")
     p.add_argument("--done-pattern", default="")
+    p.add_argument("--only-kind", choices=["swarm"],
+                   help="after a rollback to v1: deliver only swarm spaces, with no observers and no mail")
     p.add_argument("--readonly", default="", metavar="REGEX",
                    help="read-only (sandboxed) agents: the courier writes their copy and receipts after the prompt")
     p.add_argument("--quiet", default="porta-voz")
@@ -515,6 +524,10 @@ def main(argv: list[str] | None = None) -> int:
                 result = library.compat_v1(store)
         elif args.command == "export":
             result = library.export_space(store, args.space, args.out)
+        elif args.command == "export-v1":
+            result = library.export_v1(store, args.space, args.root)
+        elif args.command == "export-jobs":
+            result = library.export_jobs(store, args.file)
         else:
             raise CorreioError(f"unsupported command {args.command}")
         if isinstance(result, str):

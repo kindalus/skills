@@ -151,6 +151,26 @@ class DeliveryTest(CourierCase):
         self.courier.cycle()
         self.assertIsNone(self.store.receipt(event))
 
+    def test_after_a_rollback_the_courier_carries_only_the_open_swarms(self) -> None:
+        # The orchestration team is back on the v1 mailbox; v3 runs still open finish on correio.
+        self.opts.only_kind = "swarm"
+        self.opts.watch_ref = ("/nonexistent:main",)
+        self.swarm()
+        mail = self.send(sender="s606-preparer", to="orquestrador")["id"]
+        event = self.swarm_event("s900-principal", "orquestrador", "SWARM_READY")
+        self.herdr.set("s900-reviewer", "blocked")
+        report = self.courier.cycle()
+        self.assertEqual(report["errors"], [])
+        self.assertEqual([a["id"] for a in report["actions"]], [event])
+        (prompt,) = self.prompts_to("orquestrador")
+        self.assertIn(event, prompt)
+        self.assertNotIn(mail, prompt)
+        self.clock.advance(7300)
+        self.courier.cycle()
+        self.assertEqual(self.mails(), [])  # no observers and no escalation mail into the orchestration space
+        self.assertTrue(any("sem recibo" in title for title, _body in self.herdr.notes))
+        self.assertIsNotNone(self.store.one("SELECT 1 FROM heartbeat WHERE component='courier'"))
+
     def test_backoff_survives_long_retry_runs(self) -> None:
         self.assertEqual(daemon.delay_for(1025, 30.0, 480.0), 480.0)  # 2**1024 overflowed a float
         self.assertEqual(daemon.delay_for(10 ** 6, 30.0, 480.0), 480.0)

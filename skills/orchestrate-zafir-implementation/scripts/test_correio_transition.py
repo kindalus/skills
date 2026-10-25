@@ -80,3 +80,95 @@ class V1CommandsTest(TransitionCase):
                            "--subject", "S606 outra", "--body", "x", check=False)
         self.assertEqual(refused.returncode, 2)
         self.assertIn("nothing was sent", refused.stderr)
+
+
+class RollbackTest(TransitionCase):
+    def v1_pending(self, root: pathlib.Path, agent: str) -> list[str]:
+        result = self.cli("legacy", "pending", "--agent", agent, env={"CORREIO_ROOT": str(root)})
+        return [m["id"] for m in json.loads(result.stdout)["pending"]]
+
+    def test_the_export_is_a_v1_mailbox_the_v1_reader_accepts(self) -> None:
+        native = self.send(sender="s606-preparer", to="orquestrador", type="ENTREGA", subject="S606 pronto",
+                           body="feito")["id"]
+        handled = self.send(sender="orquestrador", to="s606-preparer", subject="S606 faz")["id"]
+        library.receipt(self.store, message_id=handled, agent="s606-preparer", disposition="a fazer")
+        questions = json.dumps([{"question": "Q?", "options": [{"label": "A"}, {"label": "B"}]}])
+        ask = self.send(sender="orquestrador", to="porta-voz", type="OWNER_QUESTION", thread="S606/REQUEST-15",
+                        fields={"askUserQuestion": questions, "request": "REQUEST-15"})["id"]
+        empty = self.temp / "v1-novo"
+        result = library.export_v1(self.store, "orq", empty)
+        self.assertEqual(result["errors"], [])
+        inbox = self.v1_pending(empty, "orquestrador")
+        native_v1 = self.store.message(native)["sent_at"]
+        self.assertEqual(len(inbox), 4)  # the three unreceipted v1 imports and the v2 ENTREGA
+        self.assertTrue(any(i.endswith(native.replace("-", "")[:8]) for i in inbox), (inbox, native_v1))
+        self.assertEqual(self.v1_pending(empty, "s606-preparer"), [])  # receipted in v2: not asked again
+        (question,) = self.v1_pending(empty, "porta-voz")
+        shown = json.loads(self.cli("legacy", "show", "--agent", "porta-voz", "--id", question,
+                                    env={"CORREIO_ROOT": str(empty)}).stdout)
+        self.assertEqual((shown["type"], shown["payload"]["askUserQuestion"][0]["question"],
+                          shown["correioV2"]["id"], shown["correioV2"]["type"]), ("PEDIDO", "Q?", ask, "OWNER_QUESTION"))
+        self.cli("legacy", "receipt", "--agent", "porta-voz", "--id", question, "--disposition", "ok",
+                 env={"CORREIO_ROOT": str(empty)})
+        self.assertEqual(self.v1_pending(empty, "porta-voz"), [])
+
+    def test_exporting_into_the_live_v1_mailbox_repeats_nothing_and_loses_nothing(self) -> None:
+        library.receipt(self.store, message_id=V1_OPEN, agent="orquestrador", disposition="tratado no v2")
+        native = self.send(sender="s606-preparer", to="orquestrador", type="ENTREGA", subject="S606 novo")["id"]
+        files = lambda: sorted(p.relative_to(self.v1_root) for p in self.v1_root.rglob("*.json"))
+        before = files()
+        first = library.export_v1(self.store, "orq", self.v1_root)
+        self.assertEqual((first["messages"], first["receipts"]), (1, 1))  # the new ENTREGA; V1_OPEN's v2 receipt
+        pending = self.v1_pending(self.v1_root, "orquestrador")
+        self.assertNotIn(V1_OPEN, pending)
+        self.assertEqual(len([p for p in pending if p.endswith(native.replace("-", "")[:8])]), 1)
+        self.assertTrue(set(before) <= set(files()))
+        after = files()
+        again = library.export_v1(self.store, "orq", self.v1_root)  # rerun after the CLI swap: only what is new
+        self.assertEqual((again["messages"], again["receipts"]), (0, 0))
+        self.assertEqual(files(), after)
+        library.create_space(self.store, space_id="s900", kind="swarm", protocol="swarm", version="2.7.0",
+                             contract={"runId": "x"}, legacy=True)
+        with self.assertRaisesRegex(library.CorreioError, "orchestration"):
+            library.export_v1(self.store, "s900", self.temp / "x")
+
+    def test_the_jobs_go_back_to_the_jsonl_queue_in_v1_order(self) -> None:
+        queue = self.temp / "lease-queue.jsonl"
+        rows = [{"id": "old1", "at": "2026-10-24T10:00:00Z", "kind": "gate", "who": "s601", "cmd": "a",
+                 "state": "done exit=0"},
+                {"id": "old2", "at": "2026-10-24T11:00:00Z", "kind": "lote", "who": "s591", "cmd": "b",
+                 "state": "queued"}]
+        queue.write_text("".join(json.dumps(r) + "\n" for r in rows))
+        importers.import_jobs(self.store, queue)
+        done = library.jobs_add(self.store, kind="gate", who="s602", cmd="c")
+        library.jobs_start(self.store, done["id"])
+        library.jobs_finish(self.store, done["id"], 3)
+        urgent = library.jobs_add(self.store, kind="gate", who="s605", cmd="d", priority=1)
+        later = library.jobs_add(self.store, kind="janela", who="s619", cmd="e")
+        with queue.open("a") as out:  # added by the v1 script after the swap back, before the second export
+            out.write(json.dumps({"id": "v1new", "at": "2026-10-26T09:00:00Z", "kind": "lote", "who": "s620",
+                                  "cmd": "f", "state": "queued"}) + "\n")
+        running = library.jobs_add(self.store, kind="lote", who="s700", cmd="g")
+        library.jobs_start(self.store, running["id"])
+        with self.assertRaisesRegex(library.CorreioError, "is running"):
+            library.export_jobs(self.store, queue)
+        library.jobs_finish(self.store, running["id"], 0)
+        result = library.export_jobs(self.store, queue)
+        out = [json.loads(line) for line in queue.read_text().splitlines()]
+        self.assertEqual(result["rows"], len(out))
+        self.assertEqual(len({r["id"] for r in out}), len(out))
+        states = {r["id"]: r["state"] for r in out}
+        self.assertEqual((states["old1"], states[done["id"]], states[running["id"]]),
+                         ("done exit=0", "done exit=3", "done exit=0"))
+        # The v1 runner serves the first "queued" line of the file: the v2 order, then what v1 added.
+        self.assertEqual([r["id"] for r in out if r["state"] == "queued"], [urgent["id"], "old2", later["id"], "v1new"])
+        self.assertEqual(library.export_jobs(self.store, queue)["rows"], len(out))  # idempotent
+
+    def test_the_cli_exports_both(self) -> None:
+        out = self.temp / "v1-cli"
+        result = json.loads(self.cli("export-v1", "--space", "orq", "--root", str(out)).stdout)
+        self.assertEqual((result["messages"], result["errors"]), (4, []))
+        self.assertEqual(len(self.v1_pending(out, "orquestrador")), 3)
+        library.jobs_add(self.store, kind="gate", who="s1", cmd="x")
+        jobs = json.loads(self.cli("export-jobs", "--file", str(self.temp / "q.jsonl")).stdout)
+        self.assertEqual(jobs["rows"], 1)
