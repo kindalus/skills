@@ -229,9 +229,13 @@ def observe(root: pathlib.Path, state: dict[str, Any], agents: dict[str, dict[st
                     sent = dt.datetime.fromisoformat(str(event.get("sentAt", "")).replace("Z", "+00:00"))
                     age = (dt.datetime.now(dt.timezone.utc) - sent).total_seconds()
                     key = f"{status_path.parent.parent.name}:{event.get('id')}"
-                    if age > 120 and key not in warned and event.get("to") != args.watch_to:
+                    if age > 120 and key not in warned:
                         warned[key] = now()
-                        system_mail(root, args.watch_to, "PEDIDO", f"swarm {status_path.parent.parent.name}: evento parado",
+                        # swarmd never prompts the orchestrator, so its own events surface here as mail.
+                        mine = event.get("to") == args.watch_to
+                        system_mail(root, args.watch_to, "PEDIDO",
+                                    f"swarm {status_path.parent.parent.name}: {event.get('type')} para ti" if mine
+                                    else f"swarm {status_path.parent.parent.name}: evento parado",
                                     f"{event.get('type')} para {event.get('to')} sem recibo há {int(age)} s: {event.get('path')}")
     # Job queue (JSONL, one job per line with id/kind/who/state): a job that ends with a non-zero exit.
     jobs_first = "jobsReported" not in state  # seed silently the first time this observer runs
