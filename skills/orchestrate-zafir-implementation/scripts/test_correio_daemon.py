@@ -20,6 +20,15 @@ SWARM_CONTRACT = {
 }
 
 
+def _suspended_writer(db: str, ready, release) -> None:
+    from correio.store import Store
+    store = Store(db)
+    with store.tx():  # holds the write lock, as a writer stopped in the middle of a transaction
+        ready.set()
+        release.wait(60)
+    store.close()
+
+
 class CourierCase(CorreioCase):
     def setUp(self) -> None:
         super().setUp()
@@ -289,6 +298,29 @@ class DeliveryTest(CourierCase):
         self.assertIsNotNone(self.store.space("s900")["closed_at"])
         self.courier.cycle()
         self.assertEqual(self.herdr.prompts, [])
+
+    def test_the_watchdog_warns_while_a_writer_is_stuck_in_its_transaction(self) -> None:
+        import multiprocessing
+        import time
+        _state, log = self.fake_herdr_binary([])
+        with self.store.tx():
+            self.store.x("INSERT OR REPLACE INTO heartbeat(component, pid, at, epoch) VALUES ('courier', 1, 'x', ?)",
+                         (time.time() - 1000,))
+        ctx = multiprocessing.get_context("spawn")
+        ready, release = ctx.Event(), ctx.Event()
+        writer = ctx.Process(target=_suspended_writer, args=(str(self.store.path), ready, release))
+        writer.start()
+        try:
+            self.assertTrue(ready.wait(60))
+            result = subprocess.run(["/usr/bin/python3", str(pathlib.Path(__file__).resolve().parent / "correio.py"),
+                                     "watchdog", "--max-age", "120"], env=os.environ.copy(), text=True,
+                                    capture_output=True, timeout=20)
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertFalse(json.loads(result.stdout)["ok"])
+            self.assertIn("estafeta parado", log.read_text())
+        finally:
+            release.set()
+            writer.join(30)
 
     def test_heartbeat_watchdog_and_backup(self) -> None:
         self.courier.cycle()

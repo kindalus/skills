@@ -17,13 +17,15 @@ import os
 import pathlib
 import re
 import signal
+import sqlite3
 import subprocess
 import sys
 import time
+import urllib.parse
 from typing import Any
 
 from . import library
-from .store import CorreioError, Store, parse_iso
+from .store import Clock, CorreioError, Store, parse_iso
 
 STOP = False
 
@@ -537,13 +539,37 @@ def backup(store: Store, directory: pathlib.Path, day: dt.date, keep: int) -> pa
     return target
 
 
-def watchdog(store: Store, herdr: Herdr, *, component: str = "courier", max_age: float = 120.0,
-             unit: str | None = None) -> dict[str, Any]:
-    """Restart the courier unit when its heartbeat is older than ``max_age`` seconds."""
-    row = store.one("SELECT * FROM heartbeat WHERE component=?", (component,))
-    age = store.clock.epoch() - float(row["epoch"]) if row else None
+def read_heartbeat(db: os.PathLike[str] | str, component: str = "courier") -> tuple[float | None, str | None]:
+    """The heartbeat epoch through a read-only connection: no migration and no write lock, so it answers while
+    a writer is stuck in a transaction (a WAL reader never waits for the writer)."""
+    path = pathlib.Path(db)
+    if not path.is_file():
+        return None, f"no database {path}"
+    try:
+        con = sqlite3.connect(f"file:{urllib.parse.quote(str(path.resolve()))}?mode=ro", uri=True, timeout=5)
+        try:
+            row = con.execute("SELECT epoch FROM heartbeat WHERE component=?", (component,)).fetchone()
+        finally:
+            con.close()
+    except sqlite3.Error as exc:
+        return None, str(exc)[:300]
+    return (float(row[0]) if row else None), None
+
+
+def watchdog(store: Store | os.PathLike[str] | str, herdr: Herdr, *, component: str = "courier",
+             max_age: float = 120.0, unit: str | None = None, clock: Clock | None = None) -> dict[str, Any]:
+    """Restart the courier unit when its heartbeat is older than ``max_age`` seconds. It reads the heartbeat
+    without the write lock, so a writer stopped mid-transaction (which stops the courier too) is reported."""
+    if isinstance(store, Store):
+        db, clock = store.path, clock or store.clock
+    else:
+        db, clock = pathlib.Path(store), clock or Clock()
+    epoch, error = read_heartbeat(db, component)
+    age = clock.epoch() - epoch if epoch is not None else None
     result: dict[str, Any] = {"component": component, "ageSeconds": None if age is None else round(age, 1),
                               "ok": age is not None and age <= max_age, "restarted": False}
+    if error:
+        result["error"] = error
     if not result["ok"]:
         if unit:
             proc = subprocess.run(["systemctl", "--user", "restart", unit], capture_output=True, text=True, timeout=60)

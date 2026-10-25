@@ -497,13 +497,14 @@ def main(argv: list[str] | None = None) -> int:
     os.umask(0o077)
     try:
         args = build_parser().parse_args(argv)
+        if args.command == "watchdog":  # no Store: opening one migrates under the write lock it must watch
+            result = daemon.watchdog(args.db or default_db_path(), daemon.Herdr(), max_age=args.max_age,
+                                     unit=args.unit)
+            out(result)
+            return 0 if result["ok"] else 1
         store = store_from(args)
         if args.command == "daemon":
             return cmd_daemon(args, store)
-        if args.command == "watchdog":
-            result = daemon.watchdog(store, daemon.Herdr(), max_age=args.max_age, unit=args.unit)
-            out(result)
-            return 0 if result["ok"] else 1
         if args.command == "backup":
             import datetime as dt
             day = dt.datetime.fromtimestamp(store.clock.epoch(), dt.timezone.utc).date()
