@@ -1321,6 +1321,10 @@ class SwarmTest(unittest.TestCase):
             for pane in fake["panes"].values():
                 pane.pop("busy_command", None)
         self.edit_fake(command_ends)
+        # The short timeout only made the busy phase end quickly. The now idle shells settle by reads (three, each
+        # two fake-herdr processes), which a loaded machine can stretch past 0.3 s and keep the pane: the rerun gets
+        # the normal timeout.
+        swarmbootstrap.SHELL_TIMEOUT_SECONDS = self.old_timing["SHELL_TIMEOUT_SECONDS"]
         with self.principal_pane(responsible["principal"]["paneId"]):
             coder = swarmctl.task_worktree(root, launch, "T123-T01", "t01", "t123-coder-a", self.base)
             own = swarmctl.task_worktree(root, launch, "T123-T02", "t02", "t123-principal", self.base)
