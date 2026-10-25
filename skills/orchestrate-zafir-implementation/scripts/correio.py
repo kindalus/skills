@@ -176,7 +176,7 @@ def herdr(*argv: str, timeout: float = 15) -> dict[str, Any]:
 
 
 def delay_for(attempts: int, minimum: float, ceiling: float) -> float:
-    return min(ceiling, minimum * (2 ** max(0, attempts - 1)))
+    return min(ceiling, minimum * (2 ** min(32, max(0, attempts - 1))))  # cap the exponent: a float overflows past 2**1023
 
 
 def prompt_text(root: pathlib.Path, message: dict[str, Any], queued: int) -> str:
