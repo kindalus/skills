@@ -188,9 +188,76 @@ def prompt_text(root: pathlib.Path, message: dict[str, Any], queued: int) -> str
             "Responde pela tua caixa de correio (correio.py send), nunca por herdr agent prompt.")
 
 
-def cycle(root: pathlib.Path, state: dict[str, Any], retry_min: float, ceiling: float) -> dict[str, Any]:
+def system_mail(root: pathlib.Path, to: str, kind: str, subject: str, body: str) -> None:
+    message_id = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + "-" + uuid.uuid4().hex[:8]
+    write_atomic(root / "inbox" / to / f"{message_id}.json", {
+        "schemaVersion": 1, "id": message_id, "from": "correio", "to": to, "type": kind,
+        "subject": subject, "sentAt": now(), "body": body})
+
+
+def observe(root: pathlib.Path, state: dict[str, Any], agents: dict[str, dict[str, Any]], args: argparse.Namespace) -> None:
+    """Turn agent transitions and ref advances into mail for the watcher (--watch-to), so nobody re-arms watchers."""
+    if not args.watch_to:
+        return
+    seen = state.setdefault("agentStatus", {})
+    first = not seen
+    done_pattern = re.compile(args.done_pattern) if args.done_pattern else None
+    quiet = set(filter(None, args.quiet.split(",")))
+    for name, agent in agents.items():
+        status, before = agent.get("agent_status"), seen.get(name)
+        seen[name] = status
+        if first or before == status or name in quiet or name == args.watch_to:
+            continue
+        if status == "blocked":
+            system_mail(root, args.watch_to, "PEDIDO", f"{name} blocked",
+                        f"{name} ({agent.get('pane_id')}) passou de {before} a blocked: uma pergunta ou permissão espera resposta.")
+        elif done_pattern and done_pattern.search(name) and before == "working" and status in ("done", "idle"):
+            system_mail(root, args.watch_to, "ENTREGA", f"{name} terminou",
+                        f"{name} ({agent.get('pane_id')}) passou de working a {status}. Lê o resultado no ecrã ou no transcript.")
+    for name in list(seen):
+        if name not in agents:
+            seen.pop(name)
+    # Swarm safety net: an event its swarmd has not got receipted for 120 s (dead or stuck supervisor).
+    warned = state.setdefault("swarmWarned", {})
+    for runs in args.watch_runs:
+        for status_path in pathlib.Path(runs).glob("*/supervision/status.json"):
+            with contextlib.suppress(Exception):
+                status = load(status_path)
+                if status.get("terminal"):
+                    continue
+                for event in status.get("pending", []):
+                    sent = dt.datetime.fromisoformat(str(event.get("sentAt", "")).replace("Z", "+00:00"))
+                    age = (dt.datetime.now(dt.timezone.utc) - sent).total_seconds()
+                    key = f"{status_path.parent.parent.name}:{event.get('id')}"
+                    if age > 120 and key not in warned and event.get("to") != args.watch_to:
+                        warned[key] = now()
+                        system_mail(root, args.watch_to, "PEDIDO", f"swarm {status_path.parent.parent.name}: evento parado",
+                                    f"{event.get('type')} para {event.get('to')} sem recibo há {int(age)} s: {event.get('path')}")
+    for spec in args.watch_ref:
+        repo, _, ref = spec.partition(":")
+        refs = state.setdefault("refs", {})
+        last_fetch = state.setdefault("lastFetch", {})
+        if time.time() - float(last_fetch.get(spec, 0)) < args.fetch_every:
+            continue
+        last_fetch[spec] = time.time()
+        with contextlib.suppress(Exception):
+            subprocess.run(["git", "-C", repo, "fetch", "-q"], capture_output=True, timeout=60)
+            head = subprocess.run(["git", "-C", repo, "rev-parse", ref], capture_output=True, text=True, timeout=10).stdout.strip()
+            if head and refs.get(spec) and refs[spec] != head:
+                log = subprocess.run(["git", "-C", repo, "log", "--oneline", f"{refs[spec]}..{head}"],
+                                     capture_output=True, text=True, timeout=10).stdout.strip()
+                system_mail(root, args.watch_to, "ENTREGA", f"{ref} avançou para {head[:9]}",
+                            f"{repo} {ref}: {refs[spec][:9]} -> {head[:9]}\n{log[:2000]}")
+            if head:
+                refs[spec] = head
+
+
+def cycle(root: pathlib.Path, state: dict[str, Any], retry_min: float, ceiling: float,
+          args: argparse.Namespace | None = None) -> dict[str, Any]:
     listed = herdr("agent", "list").get("agents", [])
     agents = {a["name"]: a for a in listed if a.get("name")}
+    if args is not None:
+        observe(root, state, agents, args)
     epoch, stamp = time.time(), now()
     records = state.setdefault("messages", {})
     alive: set[str] = set()
@@ -246,7 +313,7 @@ def cmd_daemon(args: argparse.Namespace) -> None:
     state = load(state_path) if state_path.exists() else {}
     while not STOP:
         try:
-            state = cycle(root, state, args.retry_min, args.max_backoff)
+            state = cycle(root, state, args.retry_min, args.max_backoff, args)
             write_atomic(state_path, state, exclusive=False)
         except Exception as error:  # noqa: BLE001 - keep the courier alive
             print(f"{now()} cycle error: {error}", file=sys.stderr, flush=True)
@@ -284,6 +351,12 @@ def main() -> None:
     p.add_argument("--interval", type=float, default=10.0)
     p.add_argument("--retry-min", type=float, default=30.0)
     p.add_argument("--max-backoff", type=float, default=480.0)
+    p.add_argument("--watch-to", default="", help="agent that receives the observer mail (e.g. orquestrador)")
+    p.add_argument("--done-pattern", default="", help="regex of agent names whose working→done/idle is mailed")
+    p.add_argument("--quiet", default="porta-voz", help="comma list of agents whose transitions are not mailed")
+    p.add_argument("--watch-ref", action="append", default=[], help="REPO:REF whose advance is mailed (repeatable)")
+    p.add_argument("--fetch-every", type=float, default=60.0)
+    p.add_argument("--watch-runs", action="append", default=[], help="swarm runs/ directory to watch for stuck events")
     p.set_defaults(func=cmd_daemon)
     args = parser.parse_args()
     os.umask(0o077)  # the mailbox is private to the owner
