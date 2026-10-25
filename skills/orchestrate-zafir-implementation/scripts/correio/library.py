@@ -198,9 +198,6 @@ def bump_generation(store: Store, space_id: str, agent: str, *, to: int | None =
 
 
 # -- sender authenticity --------------------------------------------------------------------------------------------
-SESSION_ENV = ("PI_SESSION_FILE", "PI_SESSION_ID", "CLAUDE_CODE_SESSION_ID", "CODEX_SESSION_ID")
-
-
 def _herdr_result(*argv: str) -> dict[str, Any] | None:
     """One read-only Herdr call ($CORREIO_HERDR names another binary); None when it fails."""
     import subprocess
@@ -225,25 +222,15 @@ def _ancestry() -> set[int]:
     return chain
 
 
-def pane_proof(agent: str, recorded: str) -> str | None:
-    """How Herdr shows that this process runs in ``recorded`` (the agent's registered pane), or None.
-
-    First the process tree: the pane's shell or one of its foreground processes (the agent) is an ancestor of
-    this process; an environment variable plays no part. Then, when that cannot be read, the agent's session:
-    Herdr's ``agent_session`` for ``agent``, which must sit in ``recorded``, equals this process's session
-    variable (PI_SESSION_FILE for pi, CLAUDE_CODE_SESSION_ID for claude)."""
+def runs_in_pane(recorded: str) -> bool:
+    """Whether Herdr shows this process inside ``recorded``: the pane's shell or one of its foreground processes
+    (the agent) is an ancestor of this process. No environment variable plays a part."""
     info = (_herdr_result("pane", "process-info", "--pane", recorded) or {}).get("process_info")
-    if isinstance(info, dict):
-        pids = {info.get("shell_pid"), info.get("foreground_process_group_id")}
-        pids |= {p.get("pid") for p in info.get("foreground_processes") or [] if isinstance(p, dict)}
-        if pids & _ancestry():
-            return "process"
-    got = _herdr_result("agent", "get", agent) or {}
-    found = got.get("agent", got) if isinstance(got, dict) else {}
-    session = (found.get("agent_session") or {}).get("value") if isinstance(found, dict) else None
-    if session and found.get("pane_id") == recorded and session in {os.environ.get(k) for k in SESSION_ENV}:
-        return "session"
-    return None
+    if not isinstance(info, dict):
+        return False
+    pids = {info.get("shell_pid"), info.get("foreground_process_group_id")}
+    pids |= {p.get("pid") for p in info.get("foreground_processes") or [] if isinstance(p, dict)}
+    return bool(pids & _ancestry())
 
 
 def verify_pane(members: dict[str, dict[str, Any]], agent: str, space_id: str = "") -> None:
@@ -251,8 +238,8 @@ def verify_pane(members: dict[str, dict[str, Any]], agent: str, space_id: str = 
     in the space. Outside Herdr nothing is checked.
 
     $HERDR_PANE_ID is the fast path. It is inherited, so it goes stale when Herdr renumbers a pane (a
-    reorganized workspace); when it differs from the recorded pane, Herdr itself decides (``pane_proof``): the
-    caller is accepted only if it runs inside the recorded pane. No proof, no send.
+    reorganized workspace); when it differs from the recorded pane, Herdr itself decides (``runs_in_pane``): the
+    caller is accepted only if its process tree runs inside the recorded pane. No proof, no send.
 
     Service processes are the explicit exception: the courier's own mail goes through ``system_mail``
     (``system=True``, sender ``correio``) and swarmctl's INFO through ``system=True`` (sender ``swarmctl``);
@@ -267,10 +254,10 @@ def verify_pane(members: dict[str, dict[str, Any]], agent: str, space_id: str = 
     if not recorded:
         raise CorreioError(f"{agent} has no pane recorded in {where}, so this pane ({pane}) "
                            f"cannot act as it: record it with correio member update --agent {agent} --pane {pane}")
-    if recorded != pane and pane_proof(agent, recorded) is None:
+    if recorded != pane and not runs_in_pane(recorded):
         raise CorreioError(
             f"{agent} is recorded in pane {recorded}, and this process (HERDR_PANE_ID {pane}) does not run in it: "
-            "Herdr shows neither its process tree nor its session there. Agents send and receipt only as "
+            "Herdr does not show its process tree there. Agents send and receipt only as "
             f"themselves. If you are {agent} and your pane changed, ask the orchestrator to record your current "
             f"pane (herdr agent get {agent} shows it): correio member update --space {space_id or '<space>'} "
             f"--agent {agent} --pane <pane>. Do not rewrite HERDR_PANE_ID.")

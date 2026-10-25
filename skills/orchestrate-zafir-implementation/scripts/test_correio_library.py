@@ -392,14 +392,13 @@ class OrchestrationProtocolTest(CorreioCase):
         with self.assertRaisesRegex(CorreioError, "does not run in it"):
             self.send(sender="preparador-15", to="orquestrador")
 
-    def test_a_matching_session_proves_the_agent_when_its_processes_cannot_be_read(self) -> None:
+    def test_a_matching_session_is_no_proof_without_a_readable_process_tree(self) -> None:
+        # A session variable is inherited like HERDR_PANE_ID; only the process tree proves the pane.
         session = "/home/k/.pi/agent/sessions/x/2026-10-22T20-56-30-035Z_01a16566.jsonl"
         self.stale_pane("w24G:p2", {}, [{"name": "preparador-15", "pane_id": "w24G:p2",
                                          "agent_session": {"kind": "file", "value": session}}])
         os.environ["PI_SESSION_FILE"] = session
-        self.send(sender="preparador-15", to="orquestrador")
-        os.environ["PI_SESSION_FILE"] = session + ".other"
-        with self.assertRaisesRegex(CorreioError, "does not run in it"):
+        with self.assertRaisesRegex(CorreioError, "does not run in it.*member update"):
             self.send(sender="preparador-15", to="orquestrador")
 
     def test_attachments_are_cited_by_path_and_hash(self) -> None:
