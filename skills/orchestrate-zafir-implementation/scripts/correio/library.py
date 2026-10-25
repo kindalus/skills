@@ -851,14 +851,16 @@ def jobs_attach(store: Store, job_id: str, pid: int) -> dict[str, Any]:
 
 
 def jobs_recover(store: Store) -> list[dict[str, Any]]:
-    """For each running job: ``alive`` while its command (or, before it is attached, its runner) is the same
-    live process; otherwise ``interrupted``, finished with exit -1 for the orchestrator to decide."""
+    """For each running job: ``alive`` while its command or its runner is still the same process (a runner
+    outlives its command until it records the exit); ``interrupted`` only when neither is, finished with exit -1
+    for the orchestrator to decide."""
     report = []
     with store.tx():
         for row in store.q("SELECT * FROM jobs WHERE state='running' ORDER BY seq"):
-            pid, start = (row["exec_pid"], row["exec_start"]) if row["exec_pid"] else (row["runner_pid"],
-                                                                                      row["runner_start"])
-            alive = start is not None and process_identity(pid) == start
+            live = [pid for pid, start in ((row["exec_pid"], row["exec_start"]), (row["runner_pid"], row["runner_start"]))
+                    if pid and start is not None and process_identity(pid) == start]
+            alive = bool(live)
+            pid = live[0] if live else (row["exec_pid"] or row["runner_pid"])
             if not alive:
                 store.x("UPDATE jobs SET state='done', exit=-1, ended_at=? WHERE id=?", (store.now(), row["id"]))
             report.append({"id": row["id"], "action": "alive" if alive else "interrupted", "pid": pid})

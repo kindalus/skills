@@ -363,8 +363,14 @@ class JobsTest(CorreioCase):
         third = library.jobs_add(self.store, kind="lote", who="s603", cmd="y")
         library.jobs_next(self.store, runner_pid=os.getpid())
         self.assertEqual(library.jobs_recover(self.store), [{"id": third["id"], "action": "alive", "pid": os.getpid()}])
+        # A command that ended while its runner lives (before the runner records the exit) is not interrupted.
+        done = subprocess.Popen(["sleep", "0.3"])
+        library.jobs_attach(self.store, third["id"], done.pid)
+        done.wait()
+        self.assertEqual(library.jobs_recover(self.store), [{"id": third["id"], "action": "alive", "pid": os.getpid()}])
         # An imported running row has no executor to check: it is closed, as before.
-        self.store.x("UPDATE jobs SET runner_pid=NULL, runner_start=NULL WHERE id=?", (third["id"],))
+        self.store.x("UPDATE jobs SET runner_pid=NULL, runner_start=NULL, exec_pid=NULL, exec_start=NULL WHERE id=?",
+                     (third["id"],))
         self.assertEqual(library.jobs_recover(self.store)[0]["action"], "interrupted")
 
     def test_priority_then_arrival_and_one_running_at_a_time(self) -> None:
