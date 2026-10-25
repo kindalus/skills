@@ -16,7 +16,7 @@ from typing import Any
 
 from swarmbootstrap import (
     bootstrap_principal, bootstrap_responsible, close_worktree, remove_worktree, require_main_checkout,
-    review_worktree, rotate_principal, task_worktree,
+    review_worktree, rotate_principal, task_worktree, wait_agent,
 )
 from swarmcore import (
     AUTOMATION_V3, EVENT_TYPES, V3_EVENT_TYPES, SwarmError, artifact_put, events_for, gate_reserve, gate_run, herdr,
@@ -98,6 +98,9 @@ def build_parser() -> argparse.ArgumentParser:
     principal = boot_sub.add_parser("principal")
     principal.add_argument("--run-dir", type=pathlib.Path, required=True)
     principal.add_argument("--authorization-event", type=pathlib.Path, required=True)
+    wait = boot_sub.add_parser("wait-agent", help="wait for a run agent blocked at startup (MODEL_REPLACE restart)")
+    wait.add_argument("--run-dir", type=pathlib.Path, required=True)
+    wait.add_argument("--agent", required=True)
     rotate = boot_sub.add_parser("restart-principal", aliases=["rotate-principal"])
     rotate.add_argument("--run-dir", type=pathlib.Path, required=True)
     rotate.add_argument("--reason", required=True)
@@ -190,6 +193,8 @@ def dispatch(args: argparse.Namespace) -> tuple[Any, int]:
                                          no_supervisor=args.no_supervisor), 0
         if args.bootstrap_command in {"restart-principal", "rotate-principal"}:
             return rotate_principal(args.run_dir, args.reason), 0
+        if args.bootstrap_command == "wait-agent":
+            return wait_agent(args.run_dir, args.agent), 0
         return bootstrap_principal(args.run_dir, args.authorization_event), 0
     root, launch = load_launch(args.run_dir)
     events = events_for(root, launch)

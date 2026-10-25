@@ -34,6 +34,8 @@ class SwarmV3Test(unittest.TestCase):
     quit_agent = legacy.SwarmTest.quit_agent
     log_entries = legacy.SwarmTest.log_entries
     FALLBACK = legacy.SwarmTest.FALLBACK
+    fake = legacy.SwarmTest.fake
+    edit_fake = legacy.SwarmTest.edit_fake
 
     def setUp(self) -> None:
         self.setUp_legacy()
@@ -463,6 +465,73 @@ class SwarmV3Test(unittest.TestCase):
         self.assertIsNotNone(space["closed_at"])
 
     # -- bootstrap (ported) ----------------------------------------------------------------------------------------
+    def fast_readiness(self) -> None:
+        old = (swarmbootstrap.AGENT_READY_TIMEOUT_SECONDS, swarmbootstrap.AGENT_READY_POLL_SECONDS)
+        swarmbootstrap.AGENT_READY_TIMEOUT_SECONDS, swarmbootstrap.AGENT_READY_POLL_SECONDS = 1.0, 0.05
+
+        def restore() -> None:
+            swarmbootstrap.AGENT_READY_TIMEOUT_SECONDS, swarmbootstrap.AGENT_READY_POLL_SECONDS = old
+        self.addCleanup(restore)
+
+    def test_an_agent_blocked_at_the_trust_dialog_of_its_own_folder_is_let_in(self) -> None:
+        # Claude in a new worktree stops at "Is this a project you created or one you trust?" and herdr agent
+        # start answers agent_not_ready; the agent is registered, so the bootstrap waits and accepts that dialog.
+        self.fast_readiness()
+        os.environ["FAKE_HERDR_TRUST"] = "1"
+        result = swarmctl.bootstrap_responsible(self.contract_path, self.run_dir, dry_run=False, no_supervisor=True)
+        pane = result["principal"]["paneId"]
+        self.assertEqual([e["args"] for e in self.log_entries("send-keys")], [["pane", "send-keys", pane, "down", "enter"]])
+        self.assertEqual(self.fake()["agents"]["t123-principal"]["agent_status"], "idle")
+        self.assertEqual(len(self.log_entries("prompt")), 1)  # the BOOT prompt went out once it was ready
+        _responsible, authorization = None, self.ev(*swarmctl.load_launch(self.run_dir), "orchestrator",
+                                                    "t123-principal", "RESUME", {"bootstrapChildrenAuthorized": True})
+        with self.principal_pane(pane):
+            swarmctl.bootstrap_principal(self.run_dir, authorization)
+        reviewer = self.fake()["agents"]["t123-reviewer"]
+        self.assertEqual(reviewer["agent_status"], "idle")  # the child in its home folder, let in the same way
+        self.assertIn(["pane", "send-keys", reviewer["pane_id"], "down", "enter"],
+                      [e["args"] for e in self.log_entries("send-keys")])
+
+    def test_a_manual_restart_for_model_replace_waits_through_the_trust_dialog(self) -> None:
+        self.fast_readiness()
+        responsible, root, launch = self.bootstrap_team()
+        reviewer = self.fake()["agents"]["t123-reviewer"]
+        self.quit_agent("t123-reviewer")
+        os.environ["FAKE_HERDR_TRUST"] = "1"
+        swarmbootstrap.wait_for_shell(reviewer["pane_id"])
+        with self.assertRaisesRegex(swarmctl.SwarmError, "agent_not_ready"):  # the restart the models card describes
+            swarmbootstrap.herdr("agent", "start", "t123-reviewer", "--kind", "claude", "--pane", reviewer["pane_id"],
+                                 "--", "--model", "claude-opus-5-5")
+        cli = subprocess.run([sys.executable, str(HERE / "swarmctl.py"), "bootstrap", "wait-agent", "--run-dir",
+                              str(root), "--agent", "t123-reviewer"], env=os.environ.copy(), text=True,
+                             capture_output=True)
+        self.assertEqual(cli.returncode, 0, cli.stderr)
+        self.assertEqual(json.loads(cli.stdout)["status"], "idle")
+        with self.assertRaisesRegex(swarmctl.SwarmError, "not an agent of this run"):
+            swarmbootstrap.wait_agent(root, "intruder")
+
+    def test_a_trust_dialog_for_another_folder_or_another_block_is_announced_not_answered(self) -> None:
+        import contextlib
+        import io
+        self.fast_readiness()
+        for env in ({"FAKE_HERDR_TRUST": "1", "FAKE_HERDR_TRUST_PATH": str(self.temp / "elsewhere")},
+                    {"FAKE_HERDR_BLOCKED": "1"}):
+            with self.subTest(env=env):
+                os.environ.update(env)
+                self.fake_log.write_text("")
+                stderr = io.StringIO()
+                with contextlib.redirect_stderr(stderr), self.assertRaisesRegex(swarmctl.SwarmError,
+                                                                                "still blocked after"):
+                    swarmctl.bootstrap_responsible(self.contract_path, self.run_dir, dry_run=False,
+                                                   no_supervisor=True)
+                self.assertEqual(self.log_entries("send-keys"), [])  # nothing answered for it
+                self.assertIn("ATTENTION: t123-principal is blocked during startup", stderr.getvalue())
+                self.assertEqual(len(self.log_entries("notify")), 1)
+                self.assertIn("t123-principal", self.fake()["agents"])  # registered, adopted by a rerun
+                for key in env:
+                    os.environ.pop(key)
+                self.edit_fake(lambda fake: fake["agents"].pop("t123-principal"))
+
     def test_responsible_bootstrap_dry_run_has_no_side_effects(self) -> None:
         result = swarmctl.bootstrap_responsible(self.contract_path, self.run_dir, dry_run=True, no_supervisor=False)
         self.assertTrue(result["dryRun"])

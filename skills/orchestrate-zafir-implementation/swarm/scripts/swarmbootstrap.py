@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import concurrent.futures
+import contextlib
 import fcntl
+import json
 import time
 import os
 import pathlib
@@ -97,16 +99,91 @@ def wait_for_shell(pane_id: str) -> None:
         time.sleep(SHELL_POLL_SECONDS)
 
 
-def start_agent(name: str, harness: str, pane_id: str, args: list[str]) -> dict[str, Any]:
-    """``herdr agent start`` once the pane is an available shell, with a bounded retry on agent_pane_busy."""
+# An agent that starts in a folder it has never seen (Claude in a new worktree or home) stops at a dialog, and
+# ``herdr agent start`` answers agent_not_ready: "blocked during startup". The agent is registered all the same,
+# so this is not a failure: the start waits for it. The one dialog accepted here is the folder-trust question
+# for exactly the folder the run created for that agent; anything else is announced (ATTENTION on stderr and a
+# Herdr notification) and waited for, up to AGENT_READY_TIMEOUT_SECONDS.
+AGENT_READY_TIMEOUT_SECONDS = 900.0
+AGENT_READY_POLL_SECONDS = 2.0
+TRUST_ACCEPT_ATTEMPTS = 3
+TRUST_MARKERS = ("Yes,Itrustthisfolder", "Isthisaprojectyoucreatedoroneyoutrust")
+
+
+def _flat(text: str) -> str:
+    """The screen without line breaks, spaces and box borders: a long path wraps across lines."""
+    return re.sub(r"[\s│┃|╭╮╰╯─]", "", text)
+
+
+def trust_dialog_for(screen: str, folder: pathlib.Path) -> bool:
+    """Whether ``screen`` shows the folder-trust dialog and the folder it names is exactly ``folder``. The path
+    stands on its own line(s) in the dialog; a long one wraps, so consecutive lines are joined, without spaces
+    and box borders, and must spell the folder exactly from a line start to a line end."""
+    if not any(marker in _flat(screen) for marker in TRUST_MARKERS):
+        return False
+    want = _flat(str(folder))
+    lines = [_flat(line) for line in screen.splitlines()]
+    for first in range(len(lines)):
+        joined = ""
+        for line in lines[first:]:
+            joined += line
+            if joined == want:
+                return True
+            if not joined or not want.startswith(joined):
+                break
+    return False
+
+
+def await_agent_ready(name: str, pane_id: str, folder: pathlib.Path, *, label: str = "") -> dict[str, Any]:
+    """Wait until ``name`` is idle or done, accepting only the trust dialog for ``folder``."""
+    deadline = time.monotonic() + AGENT_READY_TIMEOUT_SECONDS
+    accepted, announced = 0, False
+    while True:
+        agent = named_agents().get(name)
+        status = agent.get("agent_status") if agent else None
+        if agent and status in {"idle", "done", "working"}:
+            return agent
+        try:
+            screen = run(["herdr", "pane", "read", pane_id, "--source", "visible"], timeout=15).stdout
+        except SwarmError:
+            screen = ""
+        if accepted < TRUST_ACCEPT_ATTEMPTS and trust_dialog_for(screen, folder):
+            run(["herdr", "pane", "send-keys", pane_id, "down", "enter"], timeout=15)
+            accepted += 1
+            print(json.dumps({"trustAccepted": {"agent": name, "pane": pane_id, "folder": str(folder)}}),
+                  file=sys.stderr, flush=True)
+        elif not announced:
+            announced = True
+            reason = f"{name} is {status or 'not registered'} during startup in pane {pane_id}"
+            print(f"ATTENTION: {reason}: answer it in the pane; waiting up to {AGENT_READY_TIMEOUT_SECONDS:g} s",
+                  file=sys.stderr, flush=True)
+            with contextlib.suppress(SwarmError):
+                herdr("notification", "show", f"Swarm {label}: {name} bloqueado no arranque".strip(),
+                      "--body", f"{reason}. Responde no pane; a espera continua.", "--sound", "request")
+        if time.monotonic() >= deadline:
+            raise SwarmError(f"{name} is still {status or 'not registered'} after {AGENT_READY_TIMEOUT_SECONDS:g} s "
+                             f"in pane {pane_id}: answer its pane, then run the same command again (it adopts it)")
+        time.sleep(AGENT_READY_POLL_SECONDS)
+
+
+def start_agent(name: str, harness: str, pane_id: str, args: list[str], *, folder: pathlib.Path,
+                label: str = "") -> dict[str, Any]:
+    """``herdr agent start`` once the pane is an available shell, with a bounded retry on agent_pane_busy; an
+    agent blocked during startup (agent_not_ready) is registered, so the start waits for it to be ready."""
     for attempt in range(1, AGENT_START_ATTEMPTS + 1):
         wait_for_shell(pane_id)
         try:
-            return herdr("agent", "start", name, "--kind", harness, "--pane", pane_id, "--", *args,
-                         timeout=60)["agent"]
+            agent = herdr("agent", "start", name, "--kind", harness, "--pane", pane_id, "--", *args,
+                          timeout=60)["agent"]
         except SwarmError as exc:
+            if "agent_not_ready" in str(exc):
+                return await_agent_ready(name, pane_id, folder, label=label)
             if "agent_pane_busy" not in str(exc) or attempt == AGENT_START_ATTEMPTS:
                 raise
+            continue
+        if agent.get("agent_status") == "blocked":
+            return await_agent_ready(name, pane_id, folder, label=label)
+        return agent
     raise AssertionError("unreachable")
 
 
@@ -322,7 +399,8 @@ def bootstrap_responsible(contract_path: pathlib.Path, run_dir: pathlib.Path, *,
         journal["responsible"].update(principalPaneId=pane_id, principalTabId=tab_id)
         save_bootstrap(root, journal)
         harness, args = model_args(launch["models"]["principal"])
-        start_agent(principal_name, harness, pane_id, args)
+        start_agent(principal_name, harness, pane_id, args, folder=canonical(launch["slice"]["worktree"]),
+                    label=launch["prefix"])
     label_slice_workspace(launch, workspace_id, tab_id, pane_id)
     journal["responsible"].update(principalPaneId=pane_id, principalTabId=tab_id,
                                    principalWorkspaceId=workspace_id,
@@ -584,7 +662,8 @@ def _boot_and_start_children(root: pathlib.Path, launch: dict[str, Any], journal
         else:
             key = "reviewer" if name == reviewer_name(launch) else "coders"
             harness, args = model_args(launch["models"][key])
-            result = start_agent(name, harness, resource["paneId"], args)
+            result = start_agent(name, harness, resource["paneId"], args, folder=root / "homes" / name,
+                                 label=launch["prefix"])
         ref = boot_events[name]
         if result.get("agent_status") in {"idle", "done"}:
             herdr("agent", "prompt", name, boot_prompt(
@@ -637,6 +716,26 @@ def bootstrap_principal(run_dir: pathlib.Path, authorization: pathlib.Path) -> d
                                        generation, state)
     return {"principal": principal_name, "authorizationEvent": auth["id"], "children": started,
             "startsProductiveWork": False}
+
+
+def wait_agent(run_dir: pathlib.Path, name: str) -> dict[str, Any]:
+    """After a manual ``herdr agent start`` (a MODEL_REPLACE restart, models.md) that answered agent_not_ready:
+    wait for the run's agent as the bootstrap does, accepting only the trust dialog for the folder the run
+    created for it (the slice worktree for the Principal, homes/<name> for a child)."""
+    root, launch = load_launch(run_dir)
+    if name == principal_of(launch):
+        folder = canonical(launch["slice"]["worktree"])
+    elif name == reviewer_name(launch) or name in coder_names(launch):
+        folder = root / "homes" / name
+    else:
+        raise SwarmError(f"{name} is not an agent of this run")
+    agent = named_agents().get(name)
+    if agent is None:
+        raise SwarmError(f"{name} is not registered in Herdr: start it first (herdr agent start)")
+    if canonical(agent.get("cwd", "/")) != canonical(folder):
+        raise SwarmError(f"{name} runs in {agent.get('cwd')}, not in the run's folder {folder}")
+    ready = await_agent_ready(name, agent["pane_id"], folder, label=launch["prefix"])
+    return {"agent": name, "paneId": ready.get("pane_id"), "status": ready.get("agent_status"), "folder": str(folder)}
 
 
 def rotate_principal(run_dir: pathlib.Path, reason: str) -> dict[str, Any]:
@@ -705,7 +804,8 @@ def rotate_principal(run_dir: pathlib.Path, reason: str) -> dict[str, Any]:
         agent = live[principal_name]
     else:
         harness, args = model_args(launch["models"]["principal"])
-        agent = start_agent(principal_name, harness, pane_id, args)
+        agent = start_agent(principal_name, harness, pane_id, args, folder=canonical(launch["slice"]["worktree"]),
+                            label=launch["prefix"])
     herdr("pane", "rename", pane_id, pane_title(launch, "principal"))
     key = events.journal_key
     boot_ref = rotation.get(key, "")

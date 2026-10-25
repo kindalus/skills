@@ -33,6 +33,15 @@ state_path.parent.mkdir(parents=True,exist_ok=True)
 # follow on a settled pane; ROOT_BUSY leaves each worktree root pane running a foreground command.
 WARMUP=int(os.environ.get('FAKE_HERDR_WARMUP','2'));START_BUSY=int(os.environ.get('FAKE_HERDR_START_BUSY','0'))
 ROOT_BUSY=os.environ.get('FAKE_HERDR_ROOT_BUSY')=='1'
+# TRUST: a started agent stops at Claude's folder-trust dialog for its cwd (or for TRUST_PATH), and agent start
+# answers agent_not_ready; BLOCKED: it stops at another dialog. down+enter on the trust dialog lets it start.
+TRUST=os.environ.get('FAKE_HERDR_TRUST')=='1';TRUST_PATH=os.environ.get('FAKE_HERDR_TRUST_PATH')
+BLOCKED=os.environ.get('FAKE_HERDR_BLOCKED')=='1'
+def trust_screen(path):
+    wrapped='\n'.join('│ '+path[i:i+30] for i in range(0,len(path),30))
+    return ('╭────────────────────────────────╮\n│ Accessing workspace:\n│\n'+wrapped+'\n│\n'
+            '│ Quick safety check: Is this a project you created or one you trust?\n'
+            '│ ❯ 1. No, exit\n│   2. Yes, I trust this folder\n╰────────────────────────────────╯')
 def opt(name,default=None):
     return args[args.index(name)+1] if name in args else default
 def log(entry):
@@ -181,7 +190,27 @@ with open(str(state_path)+'.lock','a+') as lock:
             fail('agent_pane_busy','agent target pane '+pane+' is not an available shell')
         log({'command':'start','args':args})
         a={'name':name,'agent':opt('--kind'),'agent_status':'idle','interactive_ready':True,'pane_id':pane,'tab_id':p['tab_id'],'workspace_id':p['workspace_id'],'cwd':p['cwd'],'state_change_seq':1}
-        state['agents'][name]=a;result({'agent':a,'type':'agent_started'})
+        state['agents'][name]=a
+        if TRUST or BLOCKED:
+            a['agent_status']='blocked'
+            p['screen']=trust_screen(TRUST_PATH or p['cwd']) if TRUST else 'Bypass Permissions mode\n❯ 1. No, exit\n  2. Yes, I accept'
+            p['trust']=TRUST;state_path.write_text(json.dumps(state))
+            fail('agent_not_ready','agent '+name+' is blocked during startup and is not ready for prompts')
+        result({'agent':a,'type':'agent_started'})
+    if args[:2]==['pane','read']:
+        p=state['panes'].get(args[2])
+        if p is None: fail('pane_not_found',args[2])
+        log({'command':'pane-read','args':args});state_path.write_text(json.dumps(state))
+        print(p.get('screen','$ '));raise SystemExit(0)
+    if args[:2]==['pane','send-keys']:
+        p=state['panes'].get(args[2])
+        if p is None: fail('pane_not_found',args[2])
+        log({'command':'send-keys','args':args})
+        if p.get('trust') and args[3:]==['down','enter']:
+            p.pop('screen',None);p['trust']=False
+            for agent in state['agents'].values():
+                if agent.get('pane_id')==args[2]: agent['agent_status']='idle'
+        result({'type':'ok'})
     if args[:2]==['agent','prompt']:
         name=args[2];message=args[3]
         agent=state['agents'].get(name) or next((a for a in state['agents'].values() if a.get('pane_id')==name),None)
