@@ -33,7 +33,54 @@ def _writer(db: str, sender: str, count: int, queue) -> None:
         store.close()
 
 
+def _slow_writer(db: str, sender: str, count: int, hold: float, start, queue) -> None:
+    """A writer whose transactions take ``hold`` seconds (a slow fsync), with a 1 s busy timeout."""
+    import time
+    from correio import store as store_module
+    os.environ.pop("HERDR_PANE_ID", None)
+    store_module.BUSY_TIMEOUT_MS = 1000
+    original = library.store_message
+
+    def slow(*args, **kwargs):
+        time.sleep(hold)
+        return original(*args, **kwargs)
+    library.store_message = slow
+    store = Store(db)
+    try:
+        start.wait(60)
+        for n in range(count):
+            library.send(store, space="orq", sender=sender, to="orquestrador", type="INFO", thread="geral",
+                         subject=f"{sender} {n}")
+        queue.put(("ok", sender))
+    except Exception as exc:  # noqa: BLE001
+        queue.put(("error", repr(exc)))
+    finally:
+        store.close()
+
+
 class StoreTest(CorreioCase):
+    def test_writers_take_turns_when_one_burst_outlasts_the_busy_timeout(self) -> None:
+        # SQLite's busy handler polls, so a writer in a tight loop re-takes the lock before a waiting one wakes:
+        # the waiter starves for the other's whole burst and fails with "database is locked" past busy_timeout.
+        import itertools
+        self.orchestration()
+        ctx = multiprocessing.get_context("spawn")
+        start, queue = ctx.Event(), ctx.Queue()
+        procs = [ctx.Process(target=_slow_writer, args=(str(self.store.path), sender, 12, 0.15, start, queue))
+                 for sender in ("s606-preparer", "consultor-claude")]
+        for proc in procs:
+            proc.start()
+        import time
+        time.sleep(2)
+        start.set()
+        for proc in procs:
+            proc.join(120)
+        results = [queue.get(timeout=5) for _ in procs]
+        self.assertEqual(sorted(r[0] for r in results), ["ok", "ok"], results)
+        senders = [r[0] for r in self.store.q("SELECT from_agent FROM messages WHERE type='INFO' ORDER BY rowid")]
+        self.assertLessEqual(max(len(list(g)) for _, g in itertools.groupby(senders)), 2, senders)
+
+
     def test_pragmas_permissions_and_schema(self) -> None:
         con = self.store.con
         self.assertEqual(con.execute("PRAGMA journal_mode").fetchone()[0], "wal")

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import contextlib
 import datetime as dt
+import fcntl
 import json
 import os
 import pathlib
@@ -17,6 +18,41 @@ BUSY_TIMEOUT_MS = 10000
 
 class CorreioError(RuntimeError):
     """A refused operation; the message says why."""
+
+
+# Writers queue on a blocking flock of ``<db>.write.lock`` before BEGIN IMMEDIATE. SQLite's busy handler polls
+# with growing sleeps, so a writer in a loop re-takes the lock before a sleeping one wakes, and the sleeper can
+# starve past busy_timeout ("database is locked") while the other's burst lasts. A blocked flock waiter is woken
+# by the kernel at the release, so writers take turns. Per process the lock is shared by every Store of the same
+# file (flock is per open file), so a second Store in the process never waits on its own process.
+_WRITE_LOCKS: dict[str, list[Any]] = {}
+
+
+@contextlib.contextmanager
+def _writer_turn(db: pathlib.Path) -> Iterator[None]:
+    key = str(db.resolve()) + ".write.lock"
+    entry = _WRITE_LOCKS.get(key)
+    if entry is None:
+        old_umask = os.umask(0o077)
+        try:
+            fd = os.open(key, os.O_RDWR | os.O_CREAT, 0o600)
+        finally:
+            os.umask(old_umask)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+        except BaseException:
+            os.close(fd)
+            raise
+        entry = _WRITE_LOCKS[key] = [fd, 0]
+    entry[1] += 1
+    try:
+        yield
+    finally:
+        entry[1] -= 1
+        if entry[1] == 0:
+            del _WRITE_LOCKS[key]
+            fcntl.flock(entry[0], fcntl.LOCK_UN)
+            os.close(entry[0])
 
 
 def state_root() -> pathlib.Path:
@@ -119,17 +155,18 @@ class Store:
             finally:
                 self._depth -= 1
             return
-        self.con.execute("BEGIN IMMEDIATE")
-        self._depth = 1
-        try:
-            yield self
-        except BaseException:
-            self.con.execute("ROLLBACK")
-            raise
-        else:
-            self.con.execute("COMMIT")
-        finally:
-            self._depth = 0
+        with _writer_turn(self.path):
+            self.con.execute("BEGIN IMMEDIATE")
+            self._depth = 1
+            try:
+                yield self
+            except BaseException:
+                self.con.execute("ROLLBACK")
+                raise
+            else:
+                self.con.execute("COMMIT")
+            finally:
+                self._depth = 0
 
     def close(self) -> None:
         self.con.close()
