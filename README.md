@@ -45,6 +45,7 @@ skills/
 
 - `vendus-erp-api` is strictly read-only and requires a user-provided `VENDUS_API_KEY`.
 - `orchestrate-zafir-implementation` requires a Herdr-managed session, Git worktrees, jq, the claude, codex, pi and agy CLIs, and the ponytail, graft and grilling skills; its `scripts/preflight.sh` checks them.
+- `llm-wiki` works with plain files; its optional semantic index requires [uv](https://docs.astral.sh/uv/) and downloads a ~120 MB embedding model on first use.
 - `zafir-development-process` and `orchestrate-zafir-implementation` reference companion skills by name; install those separately when required.
 
 ## Validation

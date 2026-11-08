@@ -17,6 +17,7 @@ Before creating or modifying anything inside `wiki/`, read `references/OKF-SPEC.
 5. **`wiki/` is the curated OKF bundle.** Every non-reserved markdown file in `wiki/` must have YAML frontmatter with `type`.
 6. **Use standard markdown links in `wiki/`.** Do not write Obsidian wikilinks as the primary link format.
 7. **Log in OKF format.** Use date-grouped entries in `wiki/log.md`, not the old bracketed llm-wiki format.
+8. **Keep the semantic index current.** When the schema enables it, run `index` after every operation that writes to `wiki/` (`references/semantic-index.md`).
 
 ---
 
@@ -252,6 +253,8 @@ Suggested source-page body section:
 
 A query answers a user question from the accumulated wiki. It starts in `wiki/`, not `raw/`.
 
+The schema's retrieval mode decides how candidates are found. With `Retrieval mode: semantic`, steps 2–7 below are replaced by "Query in semantic mode" in `references/semantic-index.md`, which falls back to these steps when the retrieved sections are not enough. With `index`, the default, follow them as written.
+
 ### Query workflow
 
 1. **Read the local schema** to understand page types and conventions.
@@ -331,6 +334,10 @@ Lint checks the health of the wiki and the conversion pipeline. Run when the use
 - Converted hashes match wiki source frontmatter; mismatches mean source pages may be stale.
 - `conversion_status: failed` files are reported.
 - `partial`, `ocr-partial`, `summary-only`, and `metadata-only` ingests had user confirmation or should be reviewed.
+
+#### Semantic index
+
+Only when the schema enables it: run `status` and report stale, missing or deleted pages and settings mismatches, as listed in `references/semantic-index.md`.
 
 #### Knowledge graph health
 

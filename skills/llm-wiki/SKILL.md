@@ -21,7 +21,7 @@ Your role is not to be a one-shot answerer. Your role is to maintain a long-live
 
 ## Non-negotiable architecture
 
-Every OKF-backed LLM wiki has four layers:
+Every OKF-backed LLM wiki has four layers, plus an optional derived `db/` described under Retrieval modes:
 
 1. **`raw/`** — original source files collected by the user. These are immutable source-of-truth artifacts. Do not modify, rename, or delete them unless the user explicitly asks.
 2. **`converted/`** — generated markdown representations of files in `raw/`. Every source passes through this layer, including `.md` and `.txt` files via `conversion_status: passthrough`. This layer is generated, non-curated, and may be overwritten during reconversion.
@@ -136,6 +136,15 @@ Read `references/operations.md` for detailed workflows:
 - **Query** — answer from `wiki/`, optionally consult `converted/` when the wiki lacks detail, and file substantive answers.
 - **Lint** — check wiki health, OKF conformance, conversion staleness, links, orphans, contradictions, and unfiled queries.
 
+## Retrieval modes
+
+The schema's `Retrieval` section picks how a query finds candidate pages:
+
+- **`index`** (default) — route through `wiki/index.md`, derived pages first. Needs nothing beyond the files.
+- **`semantic`** — start from the sections an optional SQLite vector index returns, with source citations resolved, and fall back to `index` when they fall short. Needs uv and `scripts/wiki_index.py`.
+
+Read `references/semantic-index.md` when the schema sets `semantic`, or when the user asks to add semantic or vector search to a new or existing wiki.
+
 ## Tooling notes
 
 - The repo is just files. Use ordinary shell tools to list, search, hash, and inspect it.
@@ -149,4 +158,6 @@ Read `references/operations.md` for detailed workflows:
 - `references/initialization.md` — initialization interview, presets, and bootstrap procedure.
 - `references/wiki-schema-template.md` — template instantiated as the repo-local schema file.
 - `references/operations.md` — detailed convert, ingest, query, re-ingest, and lint workflows.
+- `references/semantic-index.md` — the optional semantic index: uv requirement, commands, late adoption, semantic queries, and host integration.
+- `scripts/wiki_index.py` — builds, checks, and searches the semantic index; run it with `uv run`.
 - `references/andrej-karpathy-post.md` — conceptual source for the LLM Wiki pattern; keep it as historical/reference material.

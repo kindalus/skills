@@ -30,6 +30,8 @@ This wiki has four layers:
 - `converted/` — generated markdown conversions of files in `raw/`. Every source passes through this layer before ingestion, including markdown/text via `conversion_status: passthrough`. This layer is generated and may be overwritten by reconversion.
 - `wiki/` — curated knowledge authored and maintained by the LLM. This is a fully OKF-compliant bundle.
 - `{{schema-filename}}` — this schema file. Update it only when conventions change, and append to the schema changelog.
+<!-- guidance: Keep the next line only when the semantic index is enabled. -->
+- `db/` — optional derived semantic index (`db/wiki-index.sqlite`), rebuilt from `wiki/` at any time. Never a source of truth and never cited.
 
 The required pipeline is:
 
@@ -223,10 +225,18 @@ Re-ingest is idempotent.
 6. Treat improved conversion corrections as ingestion corrections, not source contradictions.
 7. Update index and log.
 
+## Retrieval
+
+- Retrieval mode: `{{index | semantic}}`
+<!-- guidance: For `semantic`, also fill the two lines below and follow the skill's references/semantic-index.md. For `index`, delete them. -->
+- Search results per query: `{{6}}`
+- Excluded directories: `{{none, or e.g. sources/}}`
+
 ## Query workflow
 
 When asked a question:
 
+<!-- guidance: With `Retrieval mode: semantic`, replace steps 1-3 with: "Run the semantic search and answer from the retrieved sections when they fully support the answer; otherwise continue from `wiki/index.md`." -->
 1. Start with `wiki/index.md`.
 2. Read relevant wiki pages in full.
 3. Follow cross-references.
@@ -248,8 +258,9 @@ When asked to lint:
 5. Check stale ingests: converted hash vs source-page frontmatter.
 6. Report failed/partial conversions and questionable ingests.
 7. Check contradictions, stale claims, orphans, missing pages, missing cross-references, overgrown pages, gaps, and unfiled substantive queries.
-8. Present findings before applying fixes.
-9. Apply approved fixes and log the lint pass.
+8. With `Retrieval mode: semantic`, run the semantic index `status` and report stale or missing pages.
+9. Present findings before applying fixes.
+10. Apply approved fixes and log the lint pass.
 
 ## Log format
 
