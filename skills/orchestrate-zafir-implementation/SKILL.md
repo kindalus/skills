@@ -107,6 +107,7 @@ Just-in-time: a slice that depends on one still in swarm opens its preparer only
 - **Legacy runs.** A swarm launched under 2.7.0 keeps its run-pinned `swarmd` and file events until it closes: drain them with `<runDir>/runtime/swarmctl.py event pending --run-dir <runDir> --recipient <you>`, and restart a stale `swarmd` from its runtime. Import such a run once, read-only, with `correio import-run --run-dir <runDir>`; the courier refreshes the import every 5 minutes, so `correio open` shows it.
 - **Blocked agents.** Answer a `blocked` agent at once.
 - **Stalls.** A `working` agent that stops progressing, or whose last lines show a network or model error, gets the [stall procedure](references/operations.md#stalls).
-- **Context.** To compact an agent, or yourself, follow [Context](references/operations.md#context).
+- **Idle agents.** An `idle` or `done` preparer, coordinator or executor with no legitimate wait (an open `PEDIDO` of its own, an owner request, a host window) is an idle agent: wake it with a one-line `PEDIDO` to continue from its `ESTADO.md`. Keep the legitimate waits in `J/esperas.json` and sweep for idle agents on a timer, not only when someone asks.
+- **Context.** Agents compact through their own harness; to compact a free agent, `agy` or yourself, follow [Context](references/operations.md#context).
 
 Done for a run when every slice is integrated, returned with its blocker, or waiting on an owner request, and the pipeline says which.

@@ -1036,7 +1036,7 @@ def review_worktree(root: pathlib.Path, launch: dict[str, Any], task_id: str, re
         if path.exists():
             raise SwarmError(f"unrecorded worktree path already exists: {path}")
         path.parent.mkdir(parents=True, exist_ok=True)
-        run(["git", "-C", str(repo), "worktree", "add", "--detach", str(path), sha], timeout=120)
+        run(["git", "-C", str(repo), "worktree", "add", "--detach", str(path), sha], timeout=900)  # a 51k-file checkout under heavy IO takes over 2 min
     elif "detached" not in existing or existing.get("HEAD") != sha:
         raise SwarmError("existing review checkout is not detached at the candidate")
     if run(["git", "-C", str(path), "status", "--porcelain"]).stdout.strip():
