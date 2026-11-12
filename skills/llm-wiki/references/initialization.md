@@ -68,6 +68,7 @@ Ask conversationally. Do not dump every question at once. Skip questions already
 17. **Do you want one-at-a-time ingest with discussion, or explicit batch/no-discussion mode when requested?** Default is one-at-a-time with discussion.
 18. **Which schema filename should be used?** `AGENTS.md` for AGENTS-aware tools, `CLAUDE.md` for Claude Code, or `wiki-schema.md` for environment-neutral use.
 19. **Any local conventions?** Naming style, page owners, review cadence, confidence levels, lifecycle statuses.
+20. **Enable the semantic index?** Default is no (`Retrieval mode: index`). Suggest it for wikis expected to grow large, or when answer speed and token cost matter. It needs uv; read `references/semantic-index.md` before confirming, and stop at its uv check if uv is missing.
 
 Fixed decisions that are not interview questions:
 
@@ -242,6 +243,7 @@ Show the user:
 - Source conversion rules.
 - Ingestion ritual: `raw -> converted -> wiki`.
 - Query filing behavior.
+- Retrieval mode (`index` or `semantic`).
 - Lint checks.
 
 Ask: "Does this look right before I scaffold it?"
@@ -262,6 +264,8 @@ wiki/sources/
 wiki/derived/
 # plus page-type directories from the selected preset
 ```
+
+Create `db/` only when the semantic index is enabled; `index --all` creates it after the first ingest.
 
 Create the schema file at the repo root as `AGENTS.md`, `CLAUDE.md`, or `wiki-schema.md` using `references/wiki-schema-template.md`. Fill every placeholder. Remove guidance comments. If something is undecided, ask before writing.
 
