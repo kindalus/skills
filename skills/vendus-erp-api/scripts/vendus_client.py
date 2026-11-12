@@ -1,13 +1,13 @@
 """
-Vendus (Cegid Vendus) API client — READ ONLY.
+Vendus (Cegid Vendus) API client — queries and confirmed document creation.
 
 This module is part of the `vendus-erp-api` skill. It wraps the
 Vendus REST API (https://www.vendus.co.ao/ws/v1.1/) with thin helpers for
-the read endpoints we care about: clients, client balance, products,
-product stocks, and documents.
+clients, client balance, products, product stocks, document queries,
+and explicitly confirmed document issuance.
 
 Design rules:
-  - Read-only. No POST/PATCH/PUT/DELETE methods are exposed.
+  - Only write operation: confirmed POST /documents/. No generic write helper.
   - The API key is read from the VENDUS_API_KEY environment variable by
     default. It can also be passed to the constructor.
   - Pagination: list_* methods return a single page (default per_page=200).
@@ -45,7 +45,7 @@ class VendusError(RuntimeError):
 
 
 class VendusClient:
-    """Thin read-only wrapper around the Vendus v1.1 REST API."""
+    """Thin wrapper for queries and explicitly confirmed document creation."""
 
     def __init__(
         self,
@@ -234,6 +234,93 @@ class VendusClient:
     # ------------------------------------------------------------------ #
     # Documents (invoices, receipts, credit notes, ...)
     # ------------------------------------------------------------------ #
+    def create_document(self, payload: dict, *, confirmed: bool = False) -> dict:
+        """Issue one document after user approval of this exact payload.
+
+        Uses existing client/product IDs only, preventing implicit catalogue
+        creation. Never retries: a failed response can hide a completed issue.
+        See references/document-creation.md before calling.
+        """
+        if confirmed is not True:
+            raise VendusError("Document creation requires explicit user confirmation.")
+        if self.base_url != BASE_URL:
+            raise VendusError("Document creation is restricted to the Vendus Angola API.")
+        if not isinstance(payload, dict):
+            raise VendusError("Document payload must be a dict.")
+        allowed = {
+            "type", "register_id", "mode", "external_reference", "tx_id",
+            "date", "date_due", "date_supply", "notes", "stock_operation",
+            "client", "items", "payments", "invoices", "movement_of_goods",
+            "discount_amount", "discount_percentage",
+        }
+        if payload.keys() - allowed:
+            raise VendusError("Unsupported document fields; consult the creation reference.")
+        if not isinstance(payload.get("type"), str) or not payload["type"].strip():
+            raise VendusError("Specify document type explicitly.")
+        if type(payload.get("register_id")) is not int or payload["register_id"] <= 0:
+            raise VendusError("Specify a positive integer register_id.")
+        if payload.get("mode") not in ("normal", "tests"):
+            raise VendusError("Specify mode='normal' or mode='tests' explicitly.")
+        if not isinstance(payload.get("external_reference"), str) or not payload["external_reference"].strip():
+            raise VendusError("A stable external_reference is required for reconciliation.")
+        client = payload.get("client")
+        if client is not None and (
+            not isinstance(client, dict) or set(client) != {"id"}
+            or type(client["id"]) is not int or client["id"] <= 0
+        ):
+            raise VendusError("Use only client={'id': existing_client_id}, or omit client.")
+        items = payload.get("items")
+        if payload["type"] == "RG":
+            if "items" in payload or not payload.get("invoices") or not payload.get("payments"):
+                raise VendusError("RG requires invoices and payments, and must omit items.")
+        else:
+            if not isinstance(items, list) or not items:
+                raise VendusError("This document requires a non-empty items list.")
+            item_fields = {
+                "id", "qty", "gross_price", "discount_amount", "discount_percentage",
+                "variant_id", "lot_id", "tax_id", "tax_exemption", "text", "serial",
+                "reference_document",
+            }
+            for item in items:
+                if (not isinstance(item, dict) or item.keys() - item_fields
+                        or type(item.get("id")) is not int or item["id"] <= 0):
+                    raise VendusError("Each item must use an existing product id and supported line fields.")
+                try:
+                    qty = float(item.get("qty", 0))
+                except (TypeError, ValueError, OverflowError):
+                    qty = 0
+                if not 0 < qty < float("inf"):
+                    raise VendusError("Each item requires a finite positive qty.")
+                if payload["type"] == "NC":
+                    ref = item.get("reference_document")
+                    if not isinstance(ref, dict) or not ref.get("document_number") or not ref.get("document_row"):
+                        raise VendusError("NC items require the original document_number and document_row.")
+            if payload["type"] == "NC" and (
+                not isinstance(payload.get("notes"), str) or not payload["notes"].strip()
+            ):
+                raise VendusError("NC requires notes explaining the reason.")
+        try:
+            resp = self._session.post(
+                f"{BASE_URL}/documents/", json=payload,
+                timeout=self.timeout, allow_redirects=False,
+            )
+            if resp.status_code != 201:
+                raise VendusError(
+                    f"Document POST returned HTTP {resp.status_code}. "
+                    "Do not retry automatically; reconcile by external_reference."
+                )
+            data = resp.json()
+        except (requests.RequestException, ValueError) as exc:
+            raise VendusError(
+                "Document creation outcome is unknown. Do not retry; "
+                "reconcile by external_reference in Vendus."
+            ) from exc
+        if not isinstance(data, dict) or not data.get("id"):
+            raise VendusError(
+                "Creation response has no document id. Do not retry; reconcile in Vendus."
+            )
+        return data
+
     def list_documents(self, **filters) -> list[dict]:
         """Single-page document list. Filters: store_id, register_id,
         client_id, client_fiscal_id, client_country, type (CSV ok),

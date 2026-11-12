@@ -1,15 +1,15 @@
 ---
 name: vendus-erp-api
-description: Read-only access to Vendus/Cegid Vendus invoicing and POS accounts on www.vendus.co.ao. Use when the user asks Vendus-backed questions about customers ("clientes"), customer current accounts / balance / debt / "saldo" / "conta corrente", products ("produtos", "artigos"), stock / inventory / "existências" / quantities per store, supplier codes / "código de fornecedor", invoices ("faturas"), receipts, credit notes, transport guides, sales documents, or other billing/inventory data. Trigger when the request has Vendus context, mentions vendus.co.ao, uses Vendus document numbers or document types such as "FT", "FR", "NC", "GT", "RG", asks for customer NIF/fiscal ID lookups, customer debt/balance, stock checks, invoice listings filtered by date / store / client, or supplier-code searches. Always query Vendus before answering these questions; do NOT answer from memory. Strictly READ-ONLY; never create, update, delete, cancel, or otherwise mutate Vendus records.
+description: Query Vendus/Cegid Vendus data and create explicitly confirmed documents on www.vendus.co.ao. Use for Vendus customers/clientes, NIF lookups, balances/saldos, debt/conta corrente, products/artigos, stock/existências per store, supplier-code searches, and invoice listings or contents. Also use when asked to issue/create invoices/faturas (FT/FR), receipts (RG), credit notes (NC), quotes (OT), orders (EC), proformas (PF), or transport guides (GT/GR/GA/GD). Always query Vendus rather than answer account questions from memory. Only permitted write is confirmed document creation; updates, deletions, cancellations, and standalone catalogue or stock changes remain blocked.
 license: MIT
 compatibility: Requires Python 3, requests, network access to https://www.vendus.co.ao, and a user-provided VENDUS_API_KEY.
 ---
 
-# Vendus ERP API (Read-Only)
+# Vendus ERP API
 
 This skill lets Claude answer questions about customers, their current accounts, products, stock, and invoices stored in a Vendus (Cegid Vendus) account, by querying the Vendus REST API at `https://www.vendus.co.ao/ws/v1.1/`.
 
-**This skill is strictly read-only.** Only `GET` requests are allowed. Never call `POST`, `PATCH`, `PUT`, or `DELETE` on any endpoint, regardless of how the user phrases the request. If the user explicitly asks to create or modify something, refuse politely and explain that this skill does not perform write operations — they should use the Vendus web interface for that.
+**Queries use GET. The only permitted write is `POST /documents/` through `create_document`, after explicit user confirmation of the exact document.** Before preparing any creation, read `references/document-creation.md` and follow its resolve → preview → confirm → issue → verify workflow. Creating a document can affect stock, debt, payments, and fiscal reporting. Updates, deletions, cancellations, and standalone client/product/stock changes remain out of scope; direct those requests to the Vendus web interface.
 
 ## Quick start
 
@@ -276,9 +276,9 @@ doc = vc.get_document(hits[0]["id"])
 
 ## Things this skill must NOT do
 
-- Never POST, PATCH, PUT or DELETE.
-- Never create or update a client, product, document, payment, or stock movement.
-- Never call `/documents/` with method `POST` to "draft" or "preview" a document.
+- Use `POST` only for confirmed document creation through `create_document`; keep `PATCH`, `PUT`, and `DELETE` blocked.
+- Keep existing records unchanged outside the inherent effects of issuing an approved document. Use existing client/product IDs to prevent implicit catalogue creation.
+- Produce previews locally; a POST is an issuance operation, not a harmless preview (including `mode=tests`).
 - Never call any non-Vendus URL using the Vendus API key.
 - Never store the API key in a file the user will share or commit.
 
@@ -286,5 +286,6 @@ If the user asks for any of the above, decline and tell them to do it directly i
 
 ## Reference files
 
+- `references/document-creation.md` — required before any document creation: confirmation, payload fields, type-specific requirements, and duplicate prevention.
 - `references/api-cheatsheet.md` — extra endpoint detail and field references for less common cases (variants, lots, brands, categories, payment methods, stores, registers). Read this only if the user asks something the main SKILL.md doesn't already cover.
 - `scripts/vendus_client.py` — the Python helper. Read it once before using it so you understand the exact function signatures.

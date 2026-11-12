@@ -27,7 +27,7 @@ npx skills add kindalus/skills --skill vendus-erp-api
 |---|---|
 | `llm-wiki` | Build and maintain persistent, interlinked Markdown knowledge bases that compound over time. |
 | `orchestrate-zafir-implementation` | Orchestrate Zafir slices from one Herdr pane: dedicated preparers and consultants through 5.1–5.4, swarms for implementation, and single-integrator batches into main. |
-| `vendus-erp-api` | Query Vendus/Cegid Vendus ERP data through read-only API helpers for customers, balances, products, stock, and documents. |
+| `vendus-erp-api` | Query Vendus/Cegid Vendus ERP data and create documents after explicit confirmation. |
 | `zafir-development-process` | Apply the Zafir workflow from governing context and design through slice preparation, test-first implementation, integration, and closure. |
 
 ## Repository structure
@@ -43,7 +43,7 @@ skills/
 
 ## Notes
 
-- `vendus-erp-api` is strictly read-only and requires a user-provided `VENDUS_API_KEY`.
+- `vendus-erp-api` requires a user-provided `VENDUS_API_KEY`. Queries and confirmed document creation are supported; updates, deletions, and cancellations remain blocked.
 - `orchestrate-zafir-implementation` requires a Herdr-managed session, Git worktrees, jq, the claude, codex, pi and agy CLIs, and the ponytail, graft and grilling skills; its `scripts/preflight.sh` checks them.
 - `llm-wiki` works with plain files; its optional semantic index requires [uv](https://docs.astral.sh/uv/) and downloads a ~120 MB embedding model on first use.
 - `zafir-development-process` and `orchestrate-zafir-implementation` reference companion skills by name; install those separately when required.
