@@ -394,7 +394,7 @@ class OrchestrationProtocolTest(CorreioCase):
 
     def test_a_matching_session_is_no_proof_without_a_readable_process_tree(self) -> None:
         # A session variable is inherited like HERDR_PANE_ID; only the process tree proves the pane.
-        session = "/home/k/.pi/agent/sessions/x/2026-10-22T20-56-30-035Z_01a16566.jsonl"
+        session = str(self.temp / "sessions" / "2026-10-22T20-56-30-035Z_01a16566.jsonl")
         self.stale_pane("w24G:p2", {}, [{"name": "preparador-15", "pane_id": "w24G:p2",
                                          "agent_session": {"kind": "file", "value": session}}])
         os.environ["PI_SESSION_FILE"] = session
