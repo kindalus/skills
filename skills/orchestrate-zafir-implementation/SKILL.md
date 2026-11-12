@@ -48,11 +48,11 @@ Every message to the owner follows the Zafir rule *Talking to the user*.
 
 ### Decision log
 
-`J/decisions.md`, append-only, one line per event: `- <YYYY-MM-DD HH:MMZ>: <slice or ID>: <what happened or was decided>; <evidence: SHA, path and sha256>`. It records decisions, grants, launches, verdicts, owner answers and lessons. Rebuild your state from it after a compaction; read it with `rg -n` and `tail`, never whole.
+`J/decisions.md`, append-only, one line per event, at most 200 characters: `- <YYYY-MM-DD HH:MMZ>: <slice or ID>: <what happened or was decided>; <evidence: 8-hex ids or a path>`. Full SHAs and sha256 live in the files the line points to. It records decisions, grants, launches, verdicts, owner answers and lessons. Rebuild your state from it after a compaction; read it with `rg -n` and `tail`, never whole.
 
 ### Owner requests
 
-One file per request, `J/requests/REQUEST-<n>.md`, `<n>` the next free number. It states the slice and the question, the options with their consequences, your recommendation, and, for a 5.4 approval, the paths and sha256 of the spec, the approval deck and every assessment the project requires. Ask through the spokesperson, never in your own pane ([Owner questions](references/operations.md#owner-questions)): a dialog blocks you and your mail. Record the owner's answer as `ANSWER <n>` in the decision log and apply it.
+One file per request, `J/requests/REQUEST-<n>.md`, `<n>` the next free number. It states the slice and the question, the options with their consequences, your recommendation, and, for a 5.4 approval, the spec path and commit SHA and the paths of every assessment the project requires (a deck only if the owner asked for one). Ask through the spokesperson, never in your own pane ([Owner questions](references/operations.md#owner-questions)): a dialog blocks you and your mail. Record the owner's answer as `ANSWER <n>` in the decision log and apply it.
 
 ## Capacity and readiness
 

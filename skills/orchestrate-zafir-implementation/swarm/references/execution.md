@@ -116,7 +116,7 @@ assigned → red → green → in-review → approved → integrated
                             +-- fix ---+   (at most three rounds, then escalate)
 ```
 
-Each arrow is an accepted event: `TASK_ASSIGN`, `TASK_PHASE` red and green, `REVIEW_REQUEST`, `CHANGES_REQUESTED` or `APPROVED`, `TASK_INTEGRATED`. A `BLOCKED` marks its sender blocked until a `RESUME`; the needed resolution lives in the event. Dependencies are satisfied only by `integrated`. Integrated tasks are not reopened; later findings become linked correction tasks on the slice head.
+Each arrow is an accepted event: `TASK_ASSIGN`, `TASK_PHASE` red and green, `REVIEW_REQUEST`, `CHANGES_REQUESTED` or `APPROVED`, `TASK_INTEGRATED`. A `BLOCKED` marks its sender blocked until the `RESUME` that answers it; the needed resolution lives in the event. A host `PAUSE`/`RESUME` does not clear it: the member stays blocked and does not resend an unchanged `BLOCKED`. Dependencies are satisfied only by `integrated`. Integrated tasks are not reopened; later findings become linked correction tasks on the slice head.
 
 ## Worktrees and integration
 

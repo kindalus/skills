@@ -77,10 +77,9 @@ This is a standing duty through Step 5, not a one-off step.
 4. **Feasibility:** design each scenario test-first on paper: the seams and ports used, order, fixtures, guards met and host needs. Correct a scenario that contradicts a guard, a constraint or a process rule now, never in 5.5.
 5. **Size:** split by domain when the map demands it ([Lane, size and splitting](SLICE-DISCIPLINE.md#lane-size-and-splitting)).
 6. **Delivery package** when the implementer did not prepare the slice ([Delivery package](#delivery-package)). **Pre-mortem** for transversal slices.
-7. **Approval:** present the slice under **Slice approval presentation** in [SPEC-LAYOUT](SPEC-LAYOUT.md#files).
+7. **Approval:** present the slice under **Slice approval** in [SPEC-LAYOUT](SPEC-LAYOUT.md#files): the Markdown by path and version.
    - Present it even when every seam was reused or an earlier version was approved.
-   - In a `lite` project, use **Lite approval** instead.
-   - A project without a slice-deck renderer adopts one first (**Deck generation** in [SPEC-LAYOUT](SPEC-LAYOUT.md#files)).
+   - A deck only when the user asks (**Deck on request**).
    - On recovery, reuse a recorded approval only if it covers the current content.
 
 This step writes scenarios, **no executable tests**.

@@ -17,17 +17,12 @@ docs/specs/
 ```
 
 - **Markdown is authoritative.** Approval is always of the Markdown, by path and version. HTML is a presentation.
-- **Slice approval presentation.** This applies to every request to approve a slice spec: 5.4, an amendment, any transition to `spec approved`.
-  - Present HTML generated from the current Markdown, with both paths and the Markdown's commit or SHA-256.
-  - Ask for approval of that source version.
-  - The HTML carries every approval-relevant item faithfully: scope, exclusions, decisions, seams, scenarios, constraints. Verify this before presenting.
-  - Record the approval, with both paths and the version, in the spec and the register.
-  - HTML alone is not approval.
-  - A substantive change before approval requires regenerating the HTML and a new request.
-- **Lite approval.** In a `lite` project:
-  - The request presents the Markdown itself, by path, with its commit or SHA-256.
-  - The approval records that path and version.
-  - No HTML is generated unless the user asks for it.
+- **Slice approval.** Every request to approve a slice spec (5.4, an amendment, any transition to `spec approved`):
+  - presents the Markdown by path and commit SHA (or SHA-256), with the open decisions, options and a recommendation;
+  - records the approval, with that path and version, in the spec and the register;
+  - groups the approvals of one wave in one request.
+  - A substantive change before approval requires a new request.
+- **Deck on request.** When the user asks to see a deck, render it from that exact version (contract below) and cite both paths. A deck is never required for approval and is never regenerated on its own.
 - **Deck generation.**
   - Slice decks come from a deterministic renderer versioned in the project. Its contract:
     - Markdown in, HTML out;
@@ -39,8 +34,8 @@ docs/specs/
   - A project renderer meeting the same contract may replace it by recorded decision.
   - `html-slide-deck` produces non-reproducible output, so it generates only the other decks: `brainstorm.html`, `design.html`, `architecture.html`.
   - Every deck is saved beside its Markdown. When older HTML exists there, use a distinct `<slug>.deck.html`.
-  - A deck is regenerated whenever its source changes and committed in the same phase as its source. Edit the source, never the deck.
-  - Slice decks are mandatory for approval requests outside `lite` projects. Other decks are made only on request or when presenting beyond the conversation.
+  - A deck that exists is regenerated only when it is requested again. Edit the source, never the deck.
+  - Decks are made only on request or when presenting beyond the conversation.
 - **Numbering.** Slice numbering is per feature. A green-field project's first brainstorm, and a lite project's single brainstorm, use the project's name as `<feature-slug>`.
 
 ## Slice spec contents

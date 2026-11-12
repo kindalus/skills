@@ -128,7 +128,7 @@ Such a commit runs the project's cheap validators on what changed instead: the r
 - **Never weaken a guard or test** to obtain green. Outside an approved scenario change, keep every guard and assertion as approved: no removal, skip, loosened assertion or rewritten expectation.
 - **Prefer a behaviour test to a pin.** A new pinning guard (hash, regex, text, count) needs a written reason why the behaviour cannot be tested.
 - **Honest register:** a state changes only with its evidence. A missing approval, assessment or proof rejects the update. The register on the integration branch is authoritative, and worker copies are provisional.
-- **Versioned evidence:** keep or summarise evidence in versioned files. Versioned documents never cite transient paths (`tmp/`, run directories) as support.
+- **Versioned evidence is a summary, not a copy.** A versioned document states the conclusion, the command that regenerates the evidence and the sha256 of what it read. Raw outputs, catalogues, consultant answers and copies of inputs stay outside the repository (the orchestrator's job directory or the project's evidence store), cited by path and hash and marked "not versioned". Never commit a file that already exists elsewhere in the repository; keep what a slice adds under about 50 KB. Transient paths (`tmp/`) are never cited.
 - **Sequential by default.** Run work concurrently only under [CONCURRENCY](CONCURRENCY.md). Update branches by **merge, never rebase**, because phase SHAs are evidence.
 - **Own branch, always.** Every slice, bug fix, trivial change and R-lane change runs on its own branch, sequential work included.
   - A slice's own branch starts with its phase-2 commits.

@@ -49,19 +49,18 @@ Follow PREPARATION 5.3 with every record the project's process requires for the 
 
 ### 5.4 — Map, seams, scenarios and package
 
-Follow PREPARATION 5.4 in its order:
+Follow PREPARATION 5.4 in its order, at the lane's depth, and nothing beyond it:
 
-1. **Impact map**, closed with tools: graft callers to full depth and an exhaustive literal search, plus the catalog of the real migrated database. Declare the closure's limits.
-2. **Seams:** reuse the existing ones; only new, public, cross-context or uncertain seams go to the decision round.
-3. **Scenarios:** one given/when/then, with concrete values, per behaviour observable at a seam. Every governing requirement (legal, security, integrity, constraint, earlier decision) gets its own scenario or acceptance criterion. A negative scenario ("no durable effect", "nothing else changes") fixes the **form of the proof** (a universal before/after comparison of the whole state, or a rule applied before any branching), never a list of cases.
-4. **Redundancy**, with the consultants: two scenarios of the same observable behaviour merge, without taking a requirement's own scenario away; one that only adds regression proof is marked `coverage`, for a single tests-only task.
-5. **Feasibility:** design each scenario test-first: ports, order, fixtures, guards, host needs, the planned test name and the real gate command. Correct a scenario that contradicts a guard, constraint or process rule now.
-6. **Size:** split by domain when the map demands it (SLICE-DISCIPLINE *Lane, size and splitting*); record the ceiling in the spec.
-7. **Technical plan:** components per bounded context, internal contracts, build order, and the **scenario → packages/files map** (code, tests, fixtures, guards) that feeds `plannedFiles` and the swarm's task scope. Name every harness guard the touched files trigger.
-8. **Delivery package** at the lane's depth (PREPARATION *Delivery package*). The **pre-mortem** is a consultant grant from a family other than yours, with a clean context, as the last review before approval.
-9. **Approval:** generate the approval deck from the current Markdown (SPEC-LAYOUT *Slice approval presentation*) and give the orchestrator the request content: the open decision round, and the paths and sha256 of the spec, the deck and every assessment the project requires. The orchestrator sends it as an owner request. On approval, apply the 5.4 transition and recompute readiness; `implementable` is true only when every Zafir and project gate holds.
+1. **Impact map**, closed with graft and one exhaustive literal search (plus the migrated database's catalog when the slice touches SQL). Declare the closure's limits.
+2. **Seams and scenarios:** reuse existing seams; only new, public, cross-context or uncertain ones go to the decision round. One given/when/then, with concrete values, per behaviour observable at a seam, and one per governing requirement. A negative scenario ("nothing else changes") fixes the **form of the proof** (a whole-state before/after comparison, or a rule applied before branching), never a list of cases. Merge two scenarios of the same behaviour yourself.
+3. **Feasibility and size:** per scenario, the seam, fixtures, guards met and host needs; the packages and files the slice touches (`plannedFiles`), at package level. No test names, gate commands or build order: the Principal plans those in `plan.md`. Split by domain when the map demands it and record the ceiling.
+4. **Package** at the lane's depth (PREPARATION *Delivery package*): dispositions, classes (cite Decision 032 §10 and fill the perimeter), setup proof. **Pre-mortem only for a transversal slice:** one consultant from another family, clean context.
 
-**Done when:** every success condition and governing requirement has a feasible scenario or acceptance criterion at a listed seam; the map is closed with a disposition per point; no two scenarios repeat one behaviour without being merged or marked `coverage`; the package has its lane's items; the owner approved the presented version; and the register validates.
+**Approval:** give the orchestrator the request content: the spec path and its commit SHA, the open decision round with options and your recommendation, and the paths of the assessments the project requires. No deck unless the owner asks for one (SPEC-LAYOUT *Slice approval*). The orchestrator sends it as an owner request. On approval, apply the 5.4 transition and recompute readiness; `implementable` is true only when every Zafir and project gate holds.
+
+**Consultants:** one round per slice (two for a transversal); the frozen input is the spec's commit SHA. Ask a further round only for a question the owner must decide and you cannot frame alone.
+
+**Done when:** every success condition and governing requirement has a feasible scenario or acceptance criterion at a listed seam; the map is closed with a disposition per point; no two scenarios repeat one behaviour without being merged or marked `coverage`; the package has its lane's items; the owner approved that version; and the register validates.
 
 ## Reading
 

@@ -79,7 +79,7 @@ Each moment below names the row it touches and the changes it makes.
 
 A register without Z7 also appends phase SHAs after the fact: see [Registers without Z7](MIGRATION.md#registers-without-z7).
 
-A lite slice with nothing to grill goes from creation straight to 5.4. It is approved by its Markdown ([Files](SPEC-LAYOUT.md#files), *Lite approval*).
+A lite slice with nothing to grill goes from creation straight to 5.4. It is approved by its Markdown ([Files](SPEC-LAYOUT.md#files), *Slice approval*).
 
 ## Reading the register
 

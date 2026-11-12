@@ -45,7 +45,7 @@ A project profiled `lite` ([Profile and architecture style](SPEC-LAYOUT.md#profi
 - **Step 5:** seams and scenarios first, with no impact map, delivery package or pre-mortem.
   - Grilling happens only when a slice has a decision, in one round.
   - Placeholders are registered.
-  - The slice is approved by its Markdown (*Lite approval* in [Files](SPEC-LAYOUT.md#files)).
+  - The slice is approved by its Markdown (*Slice approval* in [Files](SPEC-LAYOUT.md#files)).
   - Then the three stages of 5.5 run as usual: plan, the whole battery and its RED log, green one test at a time.
 
 Two folds are allowed in Step 5:
