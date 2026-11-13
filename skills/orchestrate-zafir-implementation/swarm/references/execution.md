@@ -65,7 +65,7 @@ correio: 2
 id: <uuid>
 space: s463
 protocol: swarm
-version: 3.0.0
+version: 3.0.1
 thread: S463-T02
 type: REVIEW_REQUEST
 from: s463-principal

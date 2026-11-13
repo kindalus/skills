@@ -2,6 +2,21 @@
 
 Versions up to 2.4.2 were released as the `implement-with-swarm` skill.
 
+## 3.0.1 — 2026-11-13
+
+The owner swaps the models of the two roles in every swarm: the Principal on Claude, the reviewer on Codex.
+
+### Changed
+
+- **Defaults:** the Principal is `claude claude-opus-5-5 high` (was `codex gpt-6.1-sol high`) and the reviewer `codex gpt-6.1-sol high` in yolo mode (was `claude claude-opus-5-5 high`). `swarm.md` and `references/models.md` say so.
+- **Protocol `swarm/3.0.1`:** a reviewer `MODEL_REPLACE` is checked against each implementer's current configuration (its member row, which an accepted `MODEL_REPLACE` revises, else the launch triple), no longer against the launch contract. `swarm/3.0.0` refused a reviewer of the family the replaced Principal had left and accepted one of the family it had taken. A Principal replacement is still not checked, so a swap goes Principal first, then reviewer (`references/models.md` *Swapping the Principal and the reviewer*). The reviewer quota fallback is unchanged. New runs create their space at `swarm/3.0.1`; `swarm/3.0.0` stays published and unchanged.
+- **`correio space upgrade --space <id> --protocol swarm/3.0.1`:** moves an open space to a newer published version of its protocol, within the same major; it refuses a closed, legacy or unknown space and an older or unpublished version. Stored mail keeps the version it was sent under; a rerun at the target changes nothing. The `spaces_pinned` trigger still refuses every other change.
+- **`bootstrap restart-principal`** starts the Principal's current configuration (the member row after an accepted `MODEL_REPLACE`, else the launch triple), and its `BOOT` names it in `expectedConfiguration`. It started the launch triple.
+
+### Compatibility
+
+- Automation version 3.0.0 and the run layout are unchanged; `automation.json` keeps the protocol version the run was created with, and the space's version in `correio.db` is the pin. A space at `swarm/3.0.0` validates as before until upgraded. Runs launched under 2.7.0 keep their run-pinned runtime, whose rule is the launch contract's: they cannot swap and finish on their launch models.
+
 ## 3.0.0 — 2026-10-25
 
 Events move into correio v2, the one mail system of the orchestration team and the swarms (plan «correio v2», approved by the owner).

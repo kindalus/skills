@@ -6,7 +6,7 @@ Use the versioned scripts for deterministic mechanics. Agents retain every decis
 SWARMCTL=<absolute-swarm-dir>/scripts/swarmctl.py
 ```
 
-Automation 3.0.0 carries the run's events in **correio**: the run is a swarm space whose protocol is pinned at `swarm/3.0.0`, so nothing is copied into `runDir/runtime/`; use `$SWARMCTL` for the whole run. `correio` below is `python3 <skill>/scripts/correio.py` ([Mail](../../references/operations.md#mail)). A run launched under 2.7.0 keeps its run-pinned `runtime/` copy and file events until it closes; a contract with `"automation": "2.7.0"` still launches one, for rollback.
+Automation 3.0.0 carries the run's events in **correio**: the run is a swarm space whose protocol is pinned at `swarm/3.0.1` (`swarm/3.0.0` for a space created before it, until `correio space upgrade` moves it; `automation.json` keeps the version the run was created with), so nothing is copied into `runDir/runtime/`; use `$SWARMCTL` for the whole run. `correio` below is `python3 <skill>/scripts/correio.py` ([Mail](../../references/operations.md#mail)). A run launched under 2.7.0 keeps its run-pinned `runtime/` copy and file events until it closes; a contract with `"automation": "2.7.0"` still launches one, for rollback.
 
 ## Bootstrap
 
@@ -41,7 +41,7 @@ Optional clean restart of a gracefully quit Principal (procedure in the [Respons
   --run-dir "$RUN_DIR" --reason "clean start for integration"
 ```
 
-It refuses while the Principal's name is live, checks the recorded pane and its cwd, bumps the generation in `bootstrap.json` and in the Principal's member row, starts the same configuration in the same pane, and publishes a replacement `BOOT` with `fields.rotationReason` and `fields.previousGeneration`. An interrupted restart resumes without a second bump. After a restart, `bootstrap responsible` adopts a live Principal but refuses to start one.
+It refuses while the Principal's name is live, checks the recorded pane and its cwd, bumps the generation in `bootstrap.json` and in the Principal's member row, starts its current configuration in the same pane (the launch triple, or the one an accepted `MODEL_REPLACE` recorded in the member row), and publishes a replacement `BOOT` with `fields.rotationReason` and `fields.previousGeneration`. An interrupted restart resumes without a second bump. After a restart, `bootstrap responsible` adopts a live Principal but refuses to start one.
 
 Bootstrap is resumable. Existing resources are adopted only when their recorded name, pane, cwd, branch, run, and ownership agree. An unowned worktree must be clean at `baseSha`; otherwise bootstrap fails closed. A clean existing checkout without a Herdr workspace is opened with `herdr worktree open`.
 
@@ -76,7 +76,7 @@ A new pane's shell is still initializing when `worktree create`, `worktree open`
 
 ## Events and receipts
 
-Events are correio messages of the run's space. The CLI stamps `sentAt` and `fields.runId`, threads each event by its task (`--task-id`) or else the slice, and validates it with `swarm/3.0.0`, the 2.7.0 rules carried over: run, route, the sender's current generation (`--generation` is required), event type, recipient, and the task/assignment/revision/candidate-SHA bindings each type needs. `TASK_ASSIGN` also requires `fields.grantPath` (absolute, under `runDir/reports`) with a matching `fields.grantSha256`; a grant edited after dispatch, or a sender that has since moved to a newer generation, makes a pending event invalid, and its receipt can only reject it.
+Events are correio messages of the run's space. The CLI stamps `sentAt` and `fields.runId`, threads each event by its task (`--task-id`) or else the slice, and validates it with the space's protocol (`swarm/3.0.1` for a new run, `swarm/3.0.0` for an older space until `correio space upgrade` moves it), the 2.7.0 rules carried over: run, route, the sender's current generation (`--generation` is required), event type, recipient, and the task/assignment/revision/candidate-SHA bindings each type needs. `TASK_ASSIGN` also requires `fields.grantPath` (absolute, under `runDir/reports`) with a matching `fields.grantSha256`; a grant edited after dispatch, or a sender that has since moved to a newer generation, makes a pending event invalid, and its receipt can only reject it.
 
 ```bash
 correio send --space s430 --type REVIEW_REQUEST --from s430-principal --generation 1 --to s430-reviewer \

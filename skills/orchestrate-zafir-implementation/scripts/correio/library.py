@@ -119,6 +119,43 @@ def close_space(store: Store, space_id: str) -> dict[str, Any]:
     return _space(store, space_id)
 
 
+def upgrade_space(store: Store, space_id: str, target: str) -> dict[str, Any]:
+    """Move an open space to a newer published version of its own protocol (``target`` is ``name/version``).
+
+    Stored mail keeps its bytes and its version; from here on the space validates, projects and stamps new mail
+    with the newer module. The ``spaces_pinned`` trigger is lifted only inside this transaction, for this one
+    update, and restored from its own definition before the commit. Rerunning at the target changes nothing."""
+    name, slash, version = str(target).partition("/")
+    if not slash:
+        raise CorreioError("the protocol is name/version, for example swarm/3.0.1")
+    with store.tx():
+        sp = _space(store, space_id)
+        if sp["legacy"]:
+            raise CorreioError(f"space {space_id} is a legacy {sp['protocol']} {sp['version']} import: read-only")
+        if sp["closed_at"]:
+            raise CorreioError(f"space {space_id} is closed ({sp['state']}): only an open space is upgraded")
+        if name != sp["protocol"]:
+            raise CorreioError(f"a space keeps its protocol ({sp['protocol']}); only its version moves")
+        if version == sp["version"]:
+            return {**sp, "upgradedFrom": None}
+        try:
+            protocols.load(name, version)
+        except protocols.ProtocolMissing as exc:
+            raise CorreioError(str(exc)) from exc
+        new, old = (tuple(map(int, v.split("."))) for v in (version, sp["version"]))
+        if new < old:
+            raise CorreioError(f"{name}/{version} is older than the space's {sp['version']}")
+        if new[0] != old[0]:
+            raise CorreioError(f"an upgrade stays within major version {old[0]}")
+        pin = store.one("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='spaces_pinned'")
+        if pin is None:
+            raise CorreioError("the spaces_pinned trigger is missing; refusing to upgrade")
+        store.x("DROP TRIGGER spaces_pinned")
+        store.x("UPDATE spaces SET version=? WHERE id=?", (version, space_id))
+        store.x(pin["sql"])
+    return {**_space(store, space_id), "upgradedFrom": sp["version"]}
+
+
 def list_spaces(store: Store, *, open_only: bool = False) -> list[dict[str, Any]]:
     sql = "SELECT id FROM spaces" + (" WHERE closed_at IS NULL" if open_only else "") + " ORDER BY created_at, id"
     return [_space(store, row["id"]) for row in store.q(sql)]

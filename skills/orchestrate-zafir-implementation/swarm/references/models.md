@@ -8,20 +8,22 @@
 harness model thinking_effort
 ```
 
-Defaults (owner decisions: always Principal and reviewer, no coders; Principal on codex at high in yolo mode), copied explicitly into the launch contract unless the owner or the project records others:
+Defaults (owner decisions: always Principal and reviewer, no coders; since 2026-11-13 the Principal on Claude and the reviewer on Codex, both at high, Codex in yolo mode), copied explicitly into the launch contract unless the owner or the project records others:
 
 ```json
 {
-  "principal": "codex gpt-6.1-sol high",
-  "reviewer": "claude claude-opus-5-5 high"
+  "principal": "claude claude-opus-5-5 high",
+  "reviewer": "codex gpt-6.1-sol high"
 }
 ```
+
+Runs launched before 2026-11-13 carry the old defaults (Principal `codex gpt-6.1-sol high`, reviewer `claude claude-opus-5-5 high`) and move to the new ones by the [role swap](#swapping-the-principal-and-the-reviewer-owner-decision-2026-11-13).
 
 The team is always Principal and reviewer, so the contract never has a `coders` entry and `roster.coders` is 0.
 
 No entry, model, or effort is inferred from the caller, environment, another role, or a harness default; the responsible agent writes each triple and validates it for each run. Implementer triples may repeat.
 
-**Independent reviewer.** The reviewer's model family must differ from every implementer's. The scripts derive a coarse family: harness `claude` is Anthropic, `agy` is Google and `codex` is OpenAI; otherwise the first hint in the model ID (`claude`, `anthropic`, `opus`, `sonnet`, `haiku`, `fable` → Anthropic; `gemini`, `google` → Google; `gpt`, `openai`, `codex` → OpenAI), else the provider prefix. A same-family reviewer is rejected at validation; the one exception is the [reviewer quota fallback](#reviewer-quota-fallback-owner-decision-2026-10-02), never a launch triple. `thinking_effort` is the canonical spelling. Preserve the model identifier's case; require the harness token in lowercase. A triple is data, never an executable shell string.
+**Independent reviewer.** The reviewer's model family must differ from every implementer's current one: the launch triple, or the one an accepted `MODEL_REPLACE` recorded in the implementer's member row (protocol `swarm/3.0.1`; a space still at `swarm/3.0.0` compares with the launch contract until `correio space upgrade` moves it). The scripts derive a coarse family: harness `claude` is Anthropic, `agy` is Google and `codex` is OpenAI; otherwise the first hint in the model ID (`claude`, `anthropic`, `opus`, `sonnet`, `haiku`, `fable` → Anthropic; `gemini`, `google` → Google; `gpt`, `openai`, `codex` → OpenAI), else the provider prefix. A same-family reviewer is rejected at validation; the one exception is the [reviewer quota fallback](#reviewer-quota-fallback-owner-decision-2026-10-02), never a launch triple. `thinking_effort` is the canonical spelling. Preserve the model identifier's case; require the harness token in lowercase. A triple is data, never an executable shell string.
 
 Supported harnesses are `pi`, `claude`, `agy` (Gemini CLI wrapper) and `codex`. `claude` and `agy` are launched with `--dangerously-skip-permissions`, and `codex` with `--dangerously-bypass-approvals-and-sandbox` (yolo mode), because the team drives them through Herdr prompts with nobody at the permission UI; their effective configuration is read from the process arguments, not from `PI_*` variables. Framework independence does not imply untested harness support. Reject unknown harnesses and report what is missing rather than constructing guessed launch arguments.
 
@@ -44,10 +46,10 @@ Supported harnesses are `pi`, `claude`, `agy` (Gemini CLI wrapper) and `codex`. 
 Exact launches, with the pane ID taken from Herdr:
 
 ```bash
-herdr agent start s463-principal --kind codex --pane <id> -- \
-  --model gpt-6.1-sol -c 'model_reasoning_effort="high"' --dangerously-bypass-approvals-and-sandbox
-herdr agent start s463-reviewer --kind claude --pane <id> -- \
+herdr agent start s463-principal --kind claude --pane <id> -- \
   --model claude-opus-5-5 --effort high --dangerously-skip-permissions
+herdr agent start s463-reviewer --kind codex --pane <id> -- \
+  --model gpt-6.1-sol -c 'model_reasoning_effort="high"' --dangerously-bypass-approvals-and-sandbox
 ```
 
 Herdr passes everything after `--` to the harness unchanged. For Claude, use the full model ID (`claude-opus-5-5`), not the moving alias `opus`, so the process arguments prove the model; evidence is `/proc/<pid>/cmdline` of the pane's `claude` process. The user setting `skipDangerousModePermissionPrompt` must already be true, or the bypass warning blocks readiness; a workspace-trust dialog in a new home is answered by the user, never guessed. For Codex, the `-c` override wins over `~/.codex/config.toml`; evidence is the same `/proc/<pid>/cmdline`, which must carry `--model <model>` and `model_reasoning_effort="<effort>"`. A project directory Codex does not trust yet raises a trust prompt that the user answers.
@@ -76,7 +78,7 @@ The responsible agent either supplies an explicit new triple via `MODEL_REPLACE`
 
 ## Replacing a role
 
-`MODEL_REPLACE` comes only from the recorded responsible agent and includes `role`, complete `configuration`, and the incident ID. It changes that role's configuration, not the other roles or account credentials, and a reviewer replacement must still be another model family. The scripts validate the payload (`role`, `configuration`, `incidentId`) and reject a same-family reviewer except the quota fallback below. Only for runs launched before 2.4.0: apply the same configuration to every coder, and pause new assignments during the change rather than leaving a mixed pool.
+`MODEL_REPLACE` comes only from the recorded responsible agent and includes `role`, complete `configuration`, and the incident ID. It changes that role's configuration, not the other roles or account credentials, and a reviewer replacement must still be another model family than each implementer's current configuration. The scripts validate the payload (`role`, `configuration`, `incidentId`) and reject a same-family reviewer except the quota fallback below. A Principal replacement is not checked against the reviewer: when it takes the reviewer's family, the reviewer is replaced next, as in the [role swap](#swapping-the-principal-and-the-reviewer-owner-decision-2026-11-13). Only for runs launched before 2.4.0: apply the same configuration to every coder, and pause new assignments during the change rather than leaving a mixed pool.
 
 1. Validate the new triple and record the decision; the accepted `MODEL_REPLACE` bumps the role's configuration revision in its member row.
 2. Ask affected workers to pause/checkpoint. Record current task state, dirty paths, candidate SHA, outstanding findings, inbox receipts, and session identity. If a worker cannot answer, inspect its worktree and process from the supervisor; do not invent a checkpoint commit or discard files.
@@ -84,11 +86,23 @@ The responsible agent either supplies an explicit new triple via `MODEL_REPLACE`
 4. Increment each affected agent generation, retain its logical name/pane where possible, and restart with the new explicit configuration. Start only in an available shell pane. If `herdr agent start` answers `agent_not_ready` (blocked during startup), the agent is registered: run `swarmctl bootstrap wait-agent --run-dir <run> --agent <name>`, which accepts only the trust dialog for that agent's own folder and announces anything else. Pass the role file, run contract, current assignment/checkpoint, and pending findings; a new harness need not understand another harness's native session format.
 5. Validate `AGENT_READY` for the new generation and resume only the preserved assignment. Deduplicate old inbox events; reject old-generation work/verdicts. A review interrupted by replacement starts afresh on the frozen candidate; no verdict is inferred from partial output. Already accepted approvals remain tied to their original SHA unless code changed.
 
-**Principal failure is different.** Principal cannot reliably report or replace itself when its model is unusable. Responsible detects failed startup, terminal/provider errors, or lack of responsiveness through CLI inspection and bounded checks, chooses an explicit replacement, and stops/confirms the old Principal before starting the new generation. Children create no replacement Principal. They pause at checkpoints when they observe the outage or receive the responsible agent's pause notice; that notice does not assign them new work. The replacement Principal takes over the space's projections, the plan and `findings.md`, inventories existing children/worktrees, revalidates reservations and in-flight integration, and adopts rather than duplicates them. Responsible still launches only a Principal, never the workers. `bootstrap restart-principal` restarts the **launch** configuration for an optional clean restart; it is not a model replacement.
+**Principal failure is different.** Principal cannot reliably report or replace itself when its model is unusable. Responsible detects failed startup, terminal/provider errors, or lack of responsiveness through CLI inspection and bounded checks, chooses an explicit replacement, and stops/confirms the old Principal before starting the new generation. Children create no replacement Principal. They pause at checkpoints when they observe the outage or receive the responsible agent's pause notice; that notice does not assign them new work. The replacement Principal takes over the space's projections, the plan and `findings.md`, inventories existing children/worktrees, revalidates reservations and in-flight integration, and adopts rather than duplicates them. Responsible still launches only a Principal, never the workers. `bootstrap restart-principal` restarts the Principal's **current** configuration: the launch triple, or the one an accepted `MODEL_REPLACE` recorded in its member row. It replaces no model by itself; on a dead Principal, which cannot accept its `MODEL_REPLACE`, start the new configuration by hand as in step 4.
 
 All incidents and decisions stay in the run records. Report recovery with the actual role triple and affected agents. Recovery restores execution; it does not approve any task.
 
+## Swapping the Principal and the reviewer (owner decision 2026-11-13)
+
+The owner swapped the roles' models in every swarm: the Principal becomes `claude claude-opus-5-5 high` and the reviewer `codex gpt-6.1-sol high`. New runs take them from the defaults above. A running swarm swaps in two `MODEL_REPLACE` steps, Principal first, because only the reviewer's replacement is checked against the Principal's current family. Its space must be at `swarm/3.0.1`: at `swarm/3.0.0` the second step is refused, so first run `correio space upgrade --space <prefix> --protocol swarm/3.0.1` (an open space only; stored mail is kept as it was).
+
+1. **Safe point.** `correio open --space <prefix>` shows no unreceipted event, no task in review, no lease requested or held, and no merge or gate in flight; the plan and `findings.md` are on disk. Between the two steps both roles are on Claude, so no review is requested until step 3 ends.
+2. **Principal.** The responsible agent sends `MODEL_REPLACE` to the Principal with `role=principal`, `configuration="claude claude-opus-5-5 high"` and `incidentId` naming the owner decision (for example `owner-2026-11-13-swap`). The Principal checkpoints and receipts it accepted, which records the new configuration in its member row (`correio space show --space <prefix>`: revision 2). Then the responsible agent follows the [clean restart](../roles/responsible.md#clean-restart-optional): quit the Principal, confirm it has left `herdr agent list`, run `bootstrap restart-principal --reason "<owner decision>"`, which bumps its generation and starts the recorded Claude configuration in the same pane with a `BOOT` whose `expectedConfiguration` names it, then validate the new generation's `AGENT_READY` against `/proc/<pid>/cmdline` (`--model claude-opus-5-5`, `--effort high`) and send `RESUME` with `--field resume=restart`.
+3. **Reviewer.** The responsible agent sends `MODEL_REPLACE` with `role=reviewer`, `configuration="codex gpt-6.1-sol high"` and the same `incidentId`, accepted because the Principal is now Anthropic. The new Principal replaces the reviewer as in [Replacing a role](#replacing-a-role), steps 2–5, starting it with `herdr agent start <reviewer> --kind codex --pane <id> -- --model gpt-6.1-sol -c 'model_reasoning_effort="high"' --dangerously-bypass-approvals-and-sandbox`. This is a normal reviewer, not the quota fallback: no `reviewerFallback` marker, full independence.
+
+Approvals given before the swap stay tied to their SHA. Report the swap with both triples, the generations and the event ids.
+
 ## Reviewer quota fallback (owner decision 2026-10-02)
+
+The fallback applies to a Claude reviewer (runs launched before 2026-11-13 that have not swapped yet). With the 2026-11-13 roster the reviewer already runs `codex gpt-6.1-sol high` and no fallback is recorded: its quota incident goes to the owner.
 
 When the Claude reviewer (`claude claude-opus-5-5 high`) hits its weekly usage limit, the replacement reviewer is `codex gpt-6.1-sol high`. It is a recorded exception to **Independent reviewer**: the same OpenAI family, harness and model as the Principal.
 

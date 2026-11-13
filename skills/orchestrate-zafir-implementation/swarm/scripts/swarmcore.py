@@ -22,7 +22,10 @@ import uuid
 from typing import Any, Iterable
 
 VERSION = "2.7.0"  # the file-event automation, kept for legacy runs and rollback
-AUTOMATION_V3 = "3.0.0"  # events in correio (protocol swarm/3.0.0)
+AUTOMATION_V3 = "3.0.0"  # events in correio; the run layout and automation.json keep this version
+# The swarm protocol a new run's space is created at. A space created at 3.0.0 keeps it until
+# `correio space upgrade` moves it; the space's version in correio.db is the pin, not automation.json.
+SWARM_PROTOCOL = "3.0.1"
 AUTOMATIONS = {VERSION, AUTOMATION_V3}
 # Every worktree lives at <repoPath>/.worktrees/<name> (references/naming.md of the skill).
 WORKTREES_DIR = ".worktrees"
@@ -889,7 +892,7 @@ def gate_run(root: pathlib.Path, launch: dict[str, Any], contract_path: pathlib.
 
 # -- automation 3.0.0: events in correio ---------------------------------------------------------------------------
 # A 3.0.0 run keeps its files (launch.json, reports/, objects/, homes/, bootstrap.json and the resource ledger
-# resources.json), but its events, receipts and state live in correio.db under protocol swarm/3.0.0. Nothing is
+# resources.json), but its events, receipts and state live in correio.db under protocol swarm/3.0.x. Nothing is
 # copied into runtime/: the space's pinned protocol version is the run's pin.
 BINDING_KEYS = ("taskId", "assignmentId", "revision", "candidateSha")
 V3_EVENT_TYPES = EVENT_TYPES | {"TASK_PHASE", "INFO"}
@@ -946,7 +949,7 @@ def init_run_v3(contract: dict[str, Any], root: pathlib.Path) -> dict[str, Any]:
         finally:
             probe.close()
         marker = {"schemaVersion": 1, "automationVersion": AUTOMATION_V3, "runId": contract["runId"],
-                  "correio": {"db": str(db_path), "space": space_id, "protocol": "swarm", "version": AUTOMATION_V3,
+                  "correio": {"db": str(db_path), "space": space_id, "protocol": "swarm", "version": SWARM_PROTOCOL,
                               "scripts": str(correio_scripts())}}
         write_json_immutable(marker_path, marker, same_ok=True)
     for relative in ("reports", "homes", "objects/sha256", "supervision"):
@@ -961,7 +964,7 @@ def init_run_v3(contract: dict[str, Any], root: pathlib.Path) -> dict[str, Any]:
     store = _open_store(marker)
     space_id = marker["correio"]["space"]
     try:
-        library.create_space(store, space_id=space_id, kind="swarm", protocol="swarm", version=AUTOMATION_V3,
+        library.create_space(store, space_id=space_id, kind="swarm", protocol="swarm", version=SWARM_PROTOCOL,
                              slice_id=contract["sliceId"], prefix=contract["prefix"], run_dir=str(root),
                              repo_path=contract["repoPath"], base_sha=contract["baseSha"],
                              spec_path=contract["specPath"], contract=contract)
@@ -979,6 +982,23 @@ def init_run_v3(contract: dict[str, Any], root: pathlib.Path) -> dict[str, Any]:
         store.close()
     return {"runDir": str(root), "launchSha256": sha256_file(root / "launch.json"),
             "automationVersion": AUTOMATION_V3, "space": space_id, "db": marker["correio"]["db"]}
+
+
+def current_model(root: pathlib.Path, launch: dict[str, Any], role: str) -> str:
+    """The triple ``role`` (principal, reviewer or coders) runs now: for a 3.0.0 run, its member row in correio,
+    which only an accepted MODEL_REPLACE revises; else, and for a 2.7.0 run, the launch contract's."""
+    if not is_v3(root):
+        return launch["models"][role]
+    marker = run_marker(root)
+    store = _open_store(marker)
+    try:
+        wanted = {"principal": "principal", "reviewer": "reviewer", "coders": "coder"}[role]
+        values = [(m.get("configuration") or {}).get("value")
+                  for m in store.members(marker["correio"]["space"]).values() if m["role"] == wanted]
+    finally:
+        store.close()
+    value = next((v for v in values if isinstance(v, str)), None)
+    return value if value is not None else launch["models"][role]
 
 
 def _split_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], str]:
@@ -1037,7 +1057,7 @@ class FileEvents:
 
 
 class CorreioEvents:
-    """3.0.0: events are correio messages of the run's space (protocol swarm/3.0.0)."""
+    """3.0.0: events are correio messages of the run's space (protocol swarm/3.0.x, the space's version)."""
     version = AUTOMATION_V3
     journal_key = "bootEventId"
 

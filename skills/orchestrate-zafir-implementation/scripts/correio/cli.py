@@ -152,6 +152,8 @@ def cmd_space(args: argparse.Namespace, store: Store) -> Any:
         if args.export:
             space["export"] = library.export_space(store, args.space, args.export)
         return space
+    if args.space_command == "upgrade":
+        return library.upgrade_space(store, args.space, args.protocol)
     if args.space_command == "show":
         space = store.space(args.space)
         if space is None:
@@ -342,6 +344,9 @@ def build_parser() -> argparse.ArgumentParser:
     p = space.add_parser("close")
     p.add_argument("--space", required=True)
     p.add_argument("--export", help="also export the evidence archive to this empty directory")
+    p = space.add_parser("upgrade", help="move an open space to a newer published version of its protocol")
+    p.add_argument("--space", required=True)
+    p.add_argument("--protocol", required=True, metavar="NAME/VERSION", help="for example swarm/3.0.1")
     p = space.add_parser("show")
     p.add_argument("--space", required=True)
     p = space.add_parser("list")

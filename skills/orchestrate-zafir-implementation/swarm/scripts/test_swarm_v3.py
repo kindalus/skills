@@ -98,7 +98,8 @@ class SwarmV3Test(unittest.TestCase):
         store = self.store()
         space = store.space("t123")
         self.assertEqual((space["protocol"], space["version"], space["legacy"], space["state"]),
-                         ("swarm", "3.0.0", False, "starting"))
+                         ("swarm", "3.0.1", False, "starting"))
+        self.assertEqual(marker["correio"]["version"], "3.0.1")
         members = store.members("t123")
         self.assertEqual({n: m["role"] for n, m in members.items()},
                          {"orchestrator": "responsible", "t123-principal": "principal", "t123-reviewer": "reviewer"})
@@ -111,7 +112,7 @@ class SwarmV3Test(unittest.TestCase):
         store = self.store()
         with self.assertRaises(Exception):
             store.x("UPDATE spaces SET version='9.9.9' WHERE id='t123'")
-        self.assertEqual(store.space("t123")["version"], "3.0.0")
+        self.assertEqual(store.space("t123")["version"], "3.0.1")
 
     # -- events (ported from test_swarmctl) ---------------------------------------------------------------------
     def test_event_pending_receipt_and_route(self) -> None:
@@ -352,6 +353,70 @@ class SwarmV3Test(unittest.TestCase):
         self.assertEqual((configuration["value"], configuration["revision"]), (self.FALLBACK, 2))
         self.assertEqual(configuration["reviewerFallback"]["incidentId"], incident)
         self.assertEqual(configuration["history"][0]["value"], "claude claude-opus-5-5 high")
+
+    def replace_principal(self, root, launch, configuration, incident="owner-swap") -> str:
+        """The first step of a role swap: the Principal accepts its own replacement before it quits."""
+        event = self.ev(root, launch, "orchestrator", "t123-principal", "MODEL_REPLACE",
+                        {"role": "principal", "configuration": configuration, "incidentId": incident})
+        self.receipt(root, launch, event, "t123-principal", True, "checkpointed; handing over")
+        return event
+
+    def test_the_reviewer_may_take_the_family_the_principal_left(self) -> None:
+        root, launch = self.openai_team()
+        self.replace_principal(root, launch, "claude claude-opus-5-5 high")
+        event = self.replace_reviewer(root, launch, "codex gpt-6.1-sol high", incidentId="owner-swap")
+        self.receipt(root, launch, event, "t123-principal", True, "replacing the reviewer")
+        store = self.store()
+        self.assertEqual({name: store.member("t123", name)["configuration"]["value"]
+                          for name in ("t123-principal", "t123-reviewer")},
+                         {"t123-principal": "claude claude-opus-5-5 high", "t123-reviewer": "codex gpt-6.1-sol high"})
+        self.assertNotIn("reviewerFallback", store.member("t123", "t123-reviewer")["configuration"])
+
+    def test_the_reviewer_may_not_take_the_family_the_principal_has_now(self) -> None:
+        root, launch = self.openai_team()
+        self.replace_principal(root, launch, "claude claude-opus-5-5 high")
+        for configuration in ("claude claude-opus-5-5 high", "pi anthropic/claude-opus-5-5 high"):
+            with self.subTest(configuration=configuration):
+                with self.assertRaisesRegex(swarmctl.SwarmError, "different model family"):
+                    self.replace_reviewer(root, launch, configuration)
+
+    def test_a_replacement_not_yet_accepted_does_not_move_the_principal(self) -> None:
+        root, launch = self.openai_team()
+        self.ev(root, launch, "orchestrator", "t123-principal", "MODEL_REPLACE",
+                {"role": "principal", "configuration": "claude claude-opus-5-5 high", "incidentId": "owner-swap"})
+        with self.assertRaisesRegex(swarmctl.SwarmError, "different model family"):
+            self.replace_reviewer(root, launch, "codex gpt-6.1-sol high")
+
+    def test_a_3_0_0_space_keeps_the_launch_rule_until_it_is_upgraded(self) -> None:
+        old = swarmcore.SWARM_PROTOCOL
+        swarmcore.SWARM_PROTOCOL = "3.0.0"
+        try:
+            root, launch = self.openai_team()
+        finally:
+            swarmcore.SWARM_PROTOCOL = old
+        self.assertEqual(self.store().space("t123")["version"], "3.0.0")
+        self.replace_principal(root, launch, "claude claude-opus-5-5 high")
+        with self.assertRaisesRegex(swarmctl.SwarmError, "different model family"):
+            self.replace_reviewer(root, launch, "codex gpt-6.1-sol high")
+        library.upgrade_space(self.store(), "t123", "swarm/3.0.1")
+        self.assertTrue(self.replace_reviewer(root, launch, "codex gpt-6.1-sol high"))
+        incident = self.model_error(root, launch)  # the quota fallback is unchanged by the upgrade
+        self.assertTrue(self.replace_reviewer(root, launch, self.FALLBACK, reviewerFallback=incident))
+
+    def test_a_restart_after_an_accepted_principal_replacement_starts_the_new_configuration(self) -> None:
+        self.contract["models"].update(principal="codex gpt-6.1-sol high")
+        self.write_contract()
+        responsible, root, launch = self.bootstrap_team()
+        self.replace_principal(root, launch, "claude claude-opus-5-5 high")
+        self.quit_agent("t123-principal")
+        result = swarmctl.rotate_principal(self.run_dir, "owner swap: Principal to claude")
+        boot = self.store().message(result["bootEventId"])
+        self.assertEqual((boot["fields"]["generation"], boot["fields"]["expectedConfiguration"]),
+                         (2, "claude claude-opus-5-5 high"))
+        args = [entry["args"] for entry in self.log_entries("start") if entry["args"][2] == "t123-principal"][-1]
+        self.assertEqual(args[args.index("--kind") + 1], "claude")
+        self.assertEqual(args[args.index("--") + 1:],
+                         ["--model", "claude-opus-5-5", "--effort", "high", "--dangerously-skip-permissions"])
 
     # -- projections ---------------------------------------------------------------------------------------------
     def test_a_task_runs_its_whole_cycle_in_the_projection(self) -> None:

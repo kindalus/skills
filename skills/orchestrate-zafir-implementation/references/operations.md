@@ -23,7 +23,7 @@ Shell and Herdr lessons that bite every role. Read the `herdr` skill first; the 
 
 ## Mail
 
-Every agent talks through **correio**, never through `herdr agent prompt`: a prompt to a `blocked` agent is rejected with `agent_blocked` and lost. One SQLite database (`J/correio.db`, WAL, mode 0600) holds the messages of every **space**: the orchestration team (protocol `orchestration/1.0.0`) and each swarm (`swarm/3.0.0`, [Automation](../swarm/references/automation.md#events-and-receipts)). A space pins its protocol and version at creation; `send` validates by that version and refuses what breaks it.
+Every agent talks through **correio**, never through `herdr agent prompt`: a prompt to a `blocked` agent is rejected with `agent_blocked` and lost. One SQLite database (`J/correio.db`, WAL, mode 0600) holds the messages of every **space**: the orchestration team (protocol `orchestration/1.0.0`) and each swarm (`swarm/3.0.1`, or `swarm/3.0.0` for a space created before it; [Automation](../swarm/references/automation.md#events-and-receipts)). A space pins its protocol and version at creation; `send` validates by that version and refuses what breaks it. Only `correio space upgrade --space <id> --protocol <name>/<version>` moves an open space to a newer published version of the same protocol and major; it refuses a closed or legacy space, and stored mail keeps the version it was sent under.
 
 `correio` below means `python3 <skill>/scripts/correio.py`; `<you>` is your agent name.
 

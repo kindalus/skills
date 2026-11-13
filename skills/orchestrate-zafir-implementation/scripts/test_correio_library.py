@@ -223,7 +223,7 @@ class StoreTest(CorreioCase):
             name, version = key.split("/")
             with self.subTest(protocol=key):
                 self.assertEqual(hashlib.sha256(protocols.path_of(name, version).read_bytes()).hexdigest(), digest)
-        self.assertEqual(set(pinned), {"orchestration/1.0.0", "swarm/3.0.0"})
+        self.assertEqual(set(pinned), {"orchestration/1.0.0", "swarm/3.0.0", "swarm/3.0.1"})
         with self.assertRaises(protocols.ProtocolMissing):
             protocols.load("swarm", "9.9.9")
         with self.assertRaises(protocols.ProtocolMissing):
@@ -459,6 +459,73 @@ class OrchestrationProtocolTest(CorreioCase):
         library.leave_member(self.store, "orq", "s606-preparer")
         with self.assertRaisesRegex(CorreioError, "not a member"):
             self.send(sender="orquestrador", to="s606-preparer")
+
+
+SWARM_CONTRACT = {
+    "runId": "11111111-2222-4333-8444-555555555555", "prefix": "s900", "sliceId": "S900",
+    "responsible": {"agent": "orquestrador", "paneId": "p-orquestrador", "workspaceId": "w1", "session": "t"},
+    "models": {"principal": "codex gpt-6.1-sol high", "reviewer": "claude claude-opus-5-5 high"},
+    "roster": {"coders": 0},
+}
+
+
+class SpaceUpgradeTest(CorreioCase):
+    def swarm(self, space: str = "s900", version: str = "3.0.0") -> str:
+        library.create_space(self.store, space_id=space, kind="swarm", protocol="swarm", version=version,
+                             slice_id="S900", prefix="s900", contract=SWARM_CONTRACT)
+        library.add_member(self.store, space, "orquestrador", "responsible", pane_id="p-orquestrador")
+        library.add_member(self.store, space, "s900-principal", "principal", pane_id="p-principal")
+        return space
+
+    def test_an_open_space_moves_to_a_newer_published_version_and_keeps_its_mail(self) -> None:
+        self.swarm()
+        before = library.send(self.store, space="s900", sender="orquestrador", to="s900-principal", type="BOOT",
+                              generation=1)["id"]
+        result = library.upgrade_space(self.store, "s900", "swarm/3.0.1")
+        self.assertEqual((result["version"], result["upgradedFrom"]), ("3.0.1", "3.0.0"))
+        self.assertEqual(self.store.space("s900")["version"], "3.0.1")
+        self.assertEqual(self.store.message(before)["version"], "3.0.0")  # stored mail keeps its bytes
+        after = library.send(self.store, space="s900", sender="orquestrador", to="s900-principal", type="PAUSE",
+                             generation=1)["id"]
+        self.assertEqual(self.store.message(after)["version"], "3.0.1")
+        library.receipt(self.store, message_id=before, agent="s900-principal", disposition="ok")
+        again = library.upgrade_space(self.store, "s900", "swarm/3.0.1")  # a rerun changes nothing
+        self.assertEqual((again["version"], again["upgradedFrom"]), ("3.0.1", None))
+        with self.assertRaises(sqlite3.IntegrityError):  # the pin still holds for everything else
+            self.store.x("UPDATE spaces SET version='3.0.0' WHERE id='s900'")
+
+    def test_an_upgrade_refuses_closed_legacy_foreign_older_and_unpublished_versions(self) -> None:
+        self.swarm()
+        for target, reason in (("swarm/9.9.9", "no protocol module"),
+                               ("orchestration/1.0.0", "keeps its protocol"), ("swarm", "name/version"),
+                               ("swarm/4.0.0", "no protocol module")):
+            with self.subTest(target=target):
+                with self.assertRaisesRegex(CorreioError, reason):
+                    library.upgrade_space(self.store, "s900", target)
+        library.upgrade_space(self.store, "s900", "swarm/3.0.1")
+        with self.assertRaisesRegex(CorreioError, "older"):
+            library.upgrade_space(self.store, "s900", "swarm/3.0.0")
+        self.swarm("s901")
+        library.close_space(self.store, "s901")
+        with self.assertRaisesRegex(CorreioError, "closed"):
+            library.upgrade_space(self.store, "s901", "swarm/3.0.1")
+        self.assertEqual(self.store.space("s901")["version"], "3.0.0")
+        library.create_space(self.store, space_id="s902", kind="swarm", protocol="swarm", version="2.7.0",
+                             legacy=True)
+        with self.assertRaisesRegex(CorreioError, "legacy"):
+            library.upgrade_space(self.store, "s902", "swarm/3.0.1")
+        with self.assertRaisesRegex(CorreioError, "no space"):
+            library.upgrade_space(self.store, "s999", "swarm/3.0.1")
+
+    def test_the_cli_upgrades_a_space(self) -> None:
+        self.swarm()
+        self.store.close()
+        cli = subprocess.run([sys.executable, str(HERE / "correio.py"), "space", "upgrade", "--space", "s900",
+                              "--protocol", "swarm/3.0.1"], text=True, capture_output=True, env=os.environ.copy())
+        self.assertEqual(cli.returncode, 0, cli.stderr)
+        self.assertEqual(json.loads(cli.stdout)["version"], "3.0.1")
+        self.store = Store(os.environ["CORREIO_DB"], clock=self.clock)
+        self.assertEqual(self.store.space("s900")["version"], "3.0.1")
 
 
 def _starter(db: str, job_id: str, barrier, queue) -> None:

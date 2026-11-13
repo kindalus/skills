@@ -16,8 +16,8 @@ import sys
 from typing import Any
 
 from swarmcore import (
-    AUTOMATION_V3, SHA_RE, VERSION, SwarmError, canonical, coder_names, correio_modules, events_for, herdr,
-    init_run, is_v3, ledger_path, load_json, load_launch, model_args, now, principal_name as principal_of,
+    AUTOMATION_V3, SHA_RE, VERSION, SwarmError, canonical, coder_names, correio_modules, current_model, events_for,
+    herdr, init_run, is_v3, ledger_path, load_json, load_launch, model_args, now, principal_name as principal_of,
     reviewer_name, roster, run, run_marker, validate_new_launch, write_json_mutable,
 )
 
@@ -333,7 +333,7 @@ def boot_prompt(root: pathlib.Path, ref: str, tail: str) -> str:
         marker = run_marker(root)["correio"]
         cli = f"python3 {marker['scripts']}/correio.py --db {shlex.quote(str(marker['db']))}"
         return (f"Read and receipt BOOT {ref}: {cli} show {ref}, then {cli} receipt --agent <you> --id {ref} "
-                f"--disposition '<what you do>'. Send events with {cli} send (swarm/3.0.0). {tail}")
+                f"--disposition '<what you do>'. Send events with {cli} send. {tail}")
     return f"Read and receipt BOOT {ref}. {tail}"
 
 
@@ -746,7 +746,8 @@ def rotate_principal(run_dir: pathlib.Path, reason: str) -> dict[str, Any]:
 
     Nothing requires it; the Principal may ask for it between phases. The caller (responsible
     agent) has already quit the old session; this bumps the generation in the journal, supervisor
-    registry and state ledger, starts the same configuration in the same pane, and publishes a
+    registry and state ledger, starts the Principal's current configuration in the same pane (the
+    launch triple, or the one an accepted MODEL_REPLACE recorded in its member row), and publishes a
     replacement BOOT. Re-running resumes an interrupted restart.
     """
     root, launch = load_launch(run_dir)
@@ -801,12 +802,13 @@ def rotate_principal(run_dir: pathlib.Path, reason: str) -> dict[str, Any]:
         write_json_mutable(root / "supervisor.json", supervisor)
     record["principalGeneration"] = generation
     save_bootstrap(root, journal)
+    configuration = current_model(root, launch, "principal")  # an accepted MODEL_REPLACE starts here
     if principal_name in live:
         if live[principal_name].get("pane_id") != pane_id:
             raise SwarmError("live Principal is in an unexpected pane")
         agent = live[principal_name]
     else:
-        harness, args = model_args(launch["models"]["principal"])
+        harness, args = model_args(configuration)
         agent = start_agent(principal_name, harness, pane_id, args, folder=canonical(launch["slice"]["worktree"]),
                             label=launch["prefix"])
     herdr("pane", "rename", pane_id, pane_title(launch, "principal"))
@@ -816,7 +818,7 @@ def rotate_principal(run_dir: pathlib.Path, reason: str) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "rolePath": str(canonical(launch["skillRoot"]) / "roles" / "principal.md"),
             "launchPath": str(root / "launch.json"), "generation": generation,
-            "expectedConfiguration": launch["models"]["principal"], "ponytailPath": launch["ponytailPath"],
+            "expectedConfiguration": configuration, "ponytailPath": launch["ponytailPath"],
         }
         if events.version == AUTOMATION_V3:
             payload.update(rotationReason=rotation["reason"], previousGeneration=generation - 1,

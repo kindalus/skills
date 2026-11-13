@@ -1,15 +1,15 @@
 # Swarm
 
-A swarm implements one approved slice (Zafir 5.5–5.7) from the project's **delivery package** and hands it to the orchestrator as `SLICE_READY`. The orchestrator is the swarm's **responsible agent**: it launches and supervises the run, owns the host's exclusive lease, answers escalations, and is the single integrator into main. Versioned scripts do the deterministic mechanics (bootstrap, snapshots, gates), and its events travel by correio under the pinned protocol `swarm/3.0.0` ([Mail](../references/operations.md#mail)); agents keep every scope, review, integration and recovery decision. Reading this section launches nothing.
+A swarm implements one approved slice (Zafir 5.5–5.7) from the project's **delivery package** and hands it to the orchestrator as `SLICE_READY`. The orchestrator is the swarm's **responsible agent**: it launches and supervises the run, owns the host's exclusive lease, answers escalations, and is the single integrator into main. Versioned scripts do the deterministic mechanics (bootstrap, snapshots, gates), and its events travel by correio under the protocol its space pins, `swarm/3.0.1` for a new run ([Mail](../references/operations.md#mail)); agents keep every scope, review, integration and recovery decision. Reading this section launches nothing.
 
 ## Roster
 
 | Role | Count | Default triple | Does |
 | --- | --- | --- | --- |
-| Principal | exactly 1 | `codex gpt-6.1-sol high` (yolo mode) | plans, implements every task, integrates tasks into the slice branch, asks for the slice gate |
-| Reviewer | exactly 1 | `claude claude-opus-5-5 high` | reviews tasks and the slice; always a model family other than the Principal's |
+| Principal | exactly 1 | `claude claude-opus-5-5 high` | plans, implements every task, integrates tasks into the slice branch, asks for the slice gate |
+| Reviewer | exactly 1 | `codex gpt-6.1-sol high` (yolo mode) | reviews tasks and the slice; always a model family other than the Principal's |
 
-**No coders** (owner decision 2026-10-14): the Principal implements every task in series, and `roster.coders` is always 0. The orchestrator copies the triples into the launch contract explicitly (owner or project defaults win over these); the scripts reject a reviewer of the same family as the Principal. Sole exception, by owner decision: when the Claude reviewer exhausts its quota, `MODEL_REPLACE` may install the **reviewer quota fallback** `codex gpt-6.1-sol high` for task reviews, and the Claude reviewer re-reviews those tasks in the deep slice review before `SLICE_READY` ([Models](references/models.md#reviewer-quota-fallback-owner-decision-2026-10-02)).
+**No coders** (owner decision 2026-10-14): the Principal implements every task in series, and `roster.coders` is always 0. The orchestrator copies the triples into the launch contract explicitly (owner or project defaults win over these); the scripts reject a reviewer of the same family as the Principal's current configuration. The defaults are the owner's swap of 2026-11-13; a run launched before it swaps Principal first, then reviewer ([Models](references/models.md#swapping-the-principal-and-the-reviewer-owner-decision-2026-11-13)). Sole exception, by owner decision: when a Claude reviewer (a run not yet swapped) exhausts its quota, `MODEL_REPLACE` may install the **reviewer quota fallback** `codex gpt-6.1-sol high` for task reviews, and the Claude reviewer re-reviews those tasks in the deep slice review before `SLICE_READY` ([Models](references/models.md#reviewer-quota-fallback-owner-decision-2026-10-02)).
 
 ## Launch
 
@@ -77,7 +77,7 @@ A missing required skill is reported, never silently substituted.
 | `slice`, `worktreeRoot`, `runDir` | Slice branch and worktree, and the worktree root: omit them to take the Naming *Swarm slice* row and its location; a new contract that names another layout is rejected. `runDir` under `J/runs/`, outside the repository |
 | `skillRoot`, `ponytailPath` | Absolute path of this `swarm/` directory (it holds `swarm.md` and `roles/`); resolved `ponytail` SKILL.md |
 
-The scripts start both under their Naming agent names and pane titles: the Principal with `--kind codex -- --model gpt-6.1-sol -c 'model_reasoning_effort="high"' --dangerously-bypass-approvals-and-sandbox`, the reviewer with `--kind claude -- --model claude-opus-5-5 --effort high --dangerously-skip-permissions` ([Models](references/models.md)).
+The scripts start both under their Naming agent names and pane titles: the Principal with `--kind claude -- --model claude-opus-5-5 --effort high --dangerously-skip-permissions`, the reviewer with `--kind codex -- --model gpt-6.1-sol -c 'model_reasoning_effort="high"' --dangerously-bypass-approvals-and-sandbox` ([Models](references/models.md)).
 
 ## Supervise and receive
 
