@@ -5,17 +5,25 @@
     {
       "title": "Knowledge Management",
       "description": "Skills for persistent knowledge bases, research notebooks, and long-lived Markdown wikis.",
-      "skills": ["llm-wiki"]
+      "skills": [
+        "llm-wiki"
+      ]
     },
     {
       "title": "Agent Workflows",
       "description": "Skills for structured development processes and supervised multi-agent implementation.",
-      "skills": ["zafir-development-process", "orchestrate-zafir-implementation"]
+      "skills": [
+        "zafir-development-process",
+        "implement-with-subagents",
+        "orchestrate-zafir-implementation"
+      ]
     },
     {
       "title": "ERP Integrations",
       "description": "Skills for read-only business system and ERP data access.",
-      "skills": ["vendus-erp-api"]
+      "skills": [
+        "vendus-erp-api"
+      ]
     }
   ]
 }

@@ -26,7 +26,8 @@ npx skills add kindalus/skills --skill vendus-erp-api
 | Skill | Purpose |
 |---|---|
 | `llm-wiki` | Build and maintain persistent, interlinked Markdown knowledge bases that compound over time. |
-| `orchestrate-zafir-implementation` | Orchestrate Zafir slices from one Herdr pane: dedicated preparers and consultants through 5.1–5.4, swarms for implementation, and single-integrator batches into main. |
+| `implement-with-subagents` | Take one Zafir slice to ready-to-integrate from a single Claude Code or Codex lead that delegates to cheaper subagents and reviews with a clean-context subagent; prepares the slice first when phase 1 is open. Works with or without an orchestrator or Herdr. |
+| `orchestrate-zafir-implementation` | Orchestrate Zafir slices from one Herdr pane: dedicated preparers and consultants through 5.1–5.4, one implementer lead per slice (by default `implement-with-subagents`), and single-integrator batches into main. |
 | `vendus-erp-api` | Query Vendus/Cegid Vendus ERP data and create documents after explicit confirmation. |
 | `zafir-development-process` | Apply the Zafir workflow from governing context and design through slice preparation, test-first implementation, integration, and closure. |
 

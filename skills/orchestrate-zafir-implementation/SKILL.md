@@ -1,12 +1,12 @@
 ---
 name: orchestrate-zafir-implementation
-description: Orchestrates Zafir slices from one Herdr pane — dedicated preparers and consultants take each slice through 5.1–5.4, swarms implement it, and the orchestrator integrates batches into main. Use when the user asks to prepare, implement or integrate slices, or to run the agent team on bugs.
+description: Orchestrates Zafir slices from one Herdr pane — dedicated preparers and consultants take each slice through 5.1–5.4, one implementer lead per slice implements it, and the orchestrator integrates batches into main. Use when the user asks to prepare, implement or integrate slices, or to run the agent team on bugs.
 compatibility: Requires a Herdr session (HERDR_ENV=1), jq, the claude, codex, pi and agy CLIs, and the ponytail, graft and grilling skills; scripts/preflight.sh checks them.
 ---
 
 # Orchestrate Zafir implementation
 
-You are the **orchestrator**: the single coordinator and integrator. Preparers take slices through Zafir 5.1–5.4, consultants advise them, swarms implement 5.5–5.7, bug executors fix bugs, and you integrate every `SLICE_READY` into main. The Zafir development process (`zafir-development-process`) stays authoritative: read its SKILL.md and the step files it links before acting on a step. This skill adds the team, the hand-offs and your authority, never a second copy of the procedure. The project's own instructions (`AGENTS.md` and its process docs) add their gates on top.
+You are the **orchestrator**: the single coordinator and integrator. Preparers take slices through Zafir 5.1–5.4, consultants advise them, an implementer lead per slice implements 5.5–5.7 with an implementation skill (by default `implement-with-subagents`), bug executors fix bugs, and you integrate every slice handed off ready to integrate. The Zafir development process (`zafir-development-process`) stays authoritative: read its SKILL.md and the step files it links before acting on a step. This skill adds the team, the hand-offs and your authority, never a second copy of the procedure. The project's own instructions (`AGENTS.md` and its process docs) add their gates on top.
 
 ## Sections
 
@@ -15,7 +15,8 @@ You are the **orchestrator**: the single coordinator and integrator. Preparers t
 | Orchestrator | this file, then each section when its branch fires |
 | Preparer | [Preparation](preparation/preparer.md) |
 | Consultant | [Consultants](consultants/consultants.md#mandate) (the mandate only) |
-| Swarm (Principal, reviewer) | [Swarm](swarm/swarm.md) and its role cards |
+| Implementer lead | the implementation skill named in its brief |
+| Orchestrator launching or serving a lead | [Implementation](implementation/implementation.md) |
 | Orchestrator integrating | [Integration](integration/integration.md) |
 | Anyone driving Herdr or writing shell | [Operations](references/operations.md) |
 | Anyone creating or titling a worktree, branch, agent, pane, workspace or tab | [Naming](references/naming.md) |
@@ -26,8 +27,8 @@ Resolve every path from this skill's directory and pass absolute paths in every 
 
 1. **Preflight.** Run `scripts/preflight.sh --project <repo>`. It fails closed when the session is not Herdr, `jq` is missing, any of `claude`, `codex`, `pi`, `agy` is missing, the `ponytail`, `graft` or `grilling` skill is missing, or the project uses containers or worktrees without `podman`/`docker` and `git worktree`; it also adds the [Naming](references/naming.md#location) exclude for `.worktrees/` when missing. On failure, report the missing items and stop: nothing is launched.
 2. **Register.** Give this pane the orchestrator's agent name, pane title and tab from [Naming](references/naming.md#table) (`herdr agent rename "$HERDR_PANE_ID"`, `herdr pane rename`, `herdr tab rename`). If another live orchestrator exists, stop and ask.
-3. **Job directory.** `J=${XDG_STATE_HOME:-$HOME/.local/state}/orchestrate-zafir-implementation/<repo-key>/`, mode `0700`, outside every worktree. It holds the [decision log](#decision-log), the [owner requests](#owner-requests), the [consultant queue](consultants/consultants.md#queue), `preparers.txt`, briefs, admissions, gate logs and the swarms' `runs/`. Reuse it on resume.
-4. **Environment.** Read `herdr agent list` and create only the missing tabs and agents, named and titled per [Naming](references/naming.md#table): the consultants at reasoning high ([Roster](consultants/consultants.md#roster)), the bug executors, codex in yolo mode ([Bugs](#bugs)), and one workspace per preparer, opened on demand ([Preparers](#preparers)). Swarms run in their own Herdr workspaces, created by the swarm bootstrap.
+3. **Job directory.** `J=${XDG_STATE_HOME:-$HOME/.local/state}/orchestrate-zafir-implementation/<repo-key>/`, mode `0700`, outside every worktree. It holds the [decision log](#decision-log), the [owner requests](#owner-requests), the [consultant queue](consultants/consultants.md#queue), `preparers.txt`, briefs, admissions, gate logs and handover notes (`retomas/`). Reuse it on resume.
+4. **Environment.** Read `herdr agent list` and create only the missing tabs and agents, named and titled per [Naming](references/naming.md#table): the consultants at reasoning high ([Roster](consultants/consultants.md#roster)), the bug executors, codex in yolo mode ([Bugs](#bugs)), and one workspace per preparer, opened on demand ([Preparers](#preparers)). Implementer leads run in their slice's workspace, opened at launch ([Implementation](implementation/implementation.md#launch)).
 5. **Mail.** Create the orchestration space once and add yourself, the spokesperson and every agent of step 4 as members ([Orchestration space](references/operations.md#orchestration-space)); add each later agent when it starts. Install and start the courier service and its watchdog timer once (`correio-<repo-key>.service`, running `scripts/correio.py daemon` with the session's `HERDR_SESSION` and `HERDR_SOCKET_PATH`), and start the spokesperson in a pane of this tab ([Courier](references/operations.md#courier), [Owner questions](references/operations.md#owner-questions)).
 
 Done when preflight passes, the name is registered, `J` exists, every tab holds its live agents, and `scripts/correio.py open` shows the orchestration space with every agent as a member and a fresh courier heartbeat.
@@ -56,20 +57,20 @@ One file per request, `J/requests/REQUEST-<n>.md`, `<n>` the next free number. I
 
 ## Capacity and readiness
 
-- **No cap** on slices in preparation or in swarm. This is the owner's instruction over Zafir CONCURRENCY *Cap* (Zafir precedence rule 1); record it once in the project's concurrency decision. Only behaviour dependencies and envelope collisions limit entry, and you manage minimal collisions yourself (order, a shared owner, a serial pair).
-- Launch a swarm as soon as its slice is implementable and admitted ([Swarm launch](swarm/swarm.md#launch)).
-- Integrate through the **merge queue**: a slice's `LEASE_REQUEST`, after its deep review, gets main merged in, the whole gate, and integration at once on green; its phase-3 `SLICE_READY` follows as a documentation batch ([Integration](integration/integration.md)).
+- **No cap** on slices in preparation or in implementation. This is the owner's instruction over Zafir CONCURRENCY *Cap* (Zafir precedence rule 1); record it once in the project's concurrency decision. Only behaviour dependencies and envelope collisions limit entry, and you manage minimal collisions yourself (order, a shared owner, a serial pair).
+- Launch an implementer lead as soon as its slice is implementable and admitted ([Launch](implementation/implementation.md#launch)). The implementation skill is `implement-with-subagents` unless the owner or the admission names another that honours the [contract](implementation/implementation.md#contract); record the choice in the admission file.
+- Integrate through the **merge queue**: a lead's gate request, after its deep review, gets main merged in, the whole gate, and integration at once on green; its phase-3 handoff follows as a documentation batch ([Integration](integration/integration.md)).
 
 ### Admission
 
-An approved slice (phase 1 on main, `implementable` on the authoritative register) gets an **admission** before its swarm: a read-only check on a detached checkout of current main at its [Naming](references/naming.md#table) path. Following Zafir CONCURRENCY *Admission* and PREPARATION *Just-in-time and freshness*, it covers:
+An approved slice (phase 1 on main, `implementable` on the authoritative register) gets an **admission** before its implementer: a read-only check on a detached checkout of current main at its [Naming](references/naming.md#table) path. Following Zafir CONCURRENCY *Admission* and PREPARATION *Just-in-time and freshness*, it covers:
 
 1. the preconditions and consumed contracts, against the real signatures (graft);
 2. freshness: the diff of main since approval, against the impact map and envelope;
-3. collisions and serial rules, against every slice in swarm and every open batch;
+3. collisions and serial rules, against every slice in implementation and every open batch;
 4. the guards and map points the slice touches.
 
-It ends in a verdict, `ADMIT`, `ADMIT WITH NOTES` or `RETURN TO 5.4`, with technical blockers separated from capacity notes, in `J/admission-<slice>.md`. Its notes are the swarm's binding dispatch notes ([Launch](swarm/swarm.md#launch)). Done when the verdict file exists and its result is in the log.
+It ends in a verdict, `ADMIT`, `ADMIT WITH NOTES` or `RETURN TO 5.4`, with technical blockers separated from capacity notes, in `J/admission-<slice>.md`. Its notes bind the implementer lead ([Launch](implementation/implementation.md#launch)). Done when the verdict file exists and its result is in the log.
 
 ### Pipeline
 
@@ -89,7 +90,7 @@ The Herdr state comes from `herdr agent list`; the last activity is your one-lin
 3. **Serve** its consultant requests from the [queue](consultants/consultants.md#queue), and carry its owner questions as owner requests.
 4. **Close** it when 5.4 is approved and phase 1 is delivered: quit its harness, remove it from `preparers.txt`, log it. Its worktree and workspace stay until phase 1 is on main ([Cleanup](integration/integration.md)).
 
-Just-in-time: a slice that depends on one still in swarm opens its preparer only when that dependency reaches `SLICE_READY` (PREPARATION *Just-in-time and freshness*). Record the trigger in the pipeline.
+Just-in-time: a slice that depends on one still in implementation opens its preparer only when that dependency is handed off ready to integrate (PREPARATION *Just-in-time and freshness*). Record the trigger in the pipeline.
 
 ## Bugs
 
@@ -102,9 +103,8 @@ Just-in-time: a slice that depends on one still in swarm opens its preparer only
 
 ## Supervision
 
-- **Overview.** `correio open` (`correio` is `python3 scripts/correio.py`) is your general check: unreceipted mail and its age, unanswered requests, open threads, blocked members, active grants, swarm tasks, the host queue and the courier's heartbeat. Run it at each transition and whenever the courier is quiet for long.
-- **Mail and swarm events.** The courier prompts you with your oldest unreceipted message, from the orchestration space or from any swarm's space: receipt it, act, and answer by mail ([Mail](references/operations.md#mail)). Answer escalations, `LEASE_REQUEST`, `MODEL_ERROR` and `SLICE_READY` as the [responsible card](swarm/roles/responsible.md) sets. Instructions to every agent go by mail.
-- **Legacy runs.** A swarm launched under 2.7.0 keeps its run-pinned `swarmd` and file events until it closes: drain them with `<runDir>/runtime/swarmctl.py event pending --run-dir <runDir> --recipient <you>`, and restart a stale `swarmd` from its runtime. Import such a run once, read-only, with `correio import-run --run-dir <runDir>`; the courier refreshes the import every 5 minutes, so `correio open` shows it.
+- **Overview.** `correio open` (`correio` is `python3 scripts/correio.py`) is your general check: unreceipted mail and its age, unanswered requests, open threads, blocked members, active grants, the host queue and the courier's heartbeat. Run it at each transition and whenever the courier is quiet for long.
+- **Mail.** The courier prompts you with your oldest unreceipted message: receipt it, act, and answer by mail ([Mail](references/operations.md#mail)). Serve leads' questions, host requests, holds and handoffs as [Implementation](implementation/implementation.md#serve) sets. Instructions to every agent go by mail.
 - **Blocked agents.** Answer a `blocked` agent at once.
 - **Stalls.** A `working` agent that stops progressing, or whose last lines show a network or model error, gets the [stall procedure](references/operations.md#stalls).
 - **Idle agents.** An `idle` or `done` preparer, coordinator or executor with no legitimate wait (an open `PEDIDO` of its own, an owner request, a host window) is an idle agent: wake it with a one-line `PEDIDO` to continue from its `ESTADO.md`. Keep the legitimate waits in `J/esperas.json` and sweep for idle agents on a timer, not only when someone asks.

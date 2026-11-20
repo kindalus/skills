@@ -13,7 +13,7 @@ You are a **preparer**: you take exactly one slice through Zafir 5.1–5.4 and s
 
 ## Limit
 
-Your result is an approved base for implementation: the slice located inside an approved plan, decisions and documentation in sync, the impact map, seams, feasible scenarios and delivery package in the spec, the register row with readiness recomputed, and the phase-1 commit. **Stop there.** The only execution allowed is the discardable skeleton test of the setup proof (PREPARATION *Delivery package*, item 5), which is never committed; its result is summarised in the spec. No executable tests, production code or migrations, and no swarm.
+Your result is an approved base for implementation: the slice located inside an approved plan, decisions and documentation in sync, the impact map, seams, feasible scenarios and delivery package in the spec, the register row with readiness recomputed, and the phase-1 commit. **Stop there.** The only execution allowed is the discardable skeleton test of the setup proof (PREPARATION *Delivery package*, item 5), which is never committed; its result is summarised in the spec. No executable tests, production code or migrations, and no implementer.
 
 ## Before 5.1
 
@@ -53,7 +53,7 @@ Follow PREPARATION 5.4 in its order, at the lane's depth, and nothing beyond it:
 
 1. **Impact map**, closed with graft and one exhaustive literal search (plus the migrated database's catalog when the slice touches SQL). Declare the closure's limits.
 2. **Seams and scenarios:** reuse existing seams; only new, public, cross-context or uncertain ones go to the decision round. One given/when/then, with concrete values, per behaviour observable at a seam, and one per governing requirement. A negative scenario ("nothing else changes") fixes the **form of the proof** (a whole-state before/after comparison, or a rule applied before branching), never a list of cases. Merge two scenarios of the same behaviour yourself.
-3. **Feasibility and size:** per scenario, the seam, fixtures, guards met and host needs; the packages and files the slice touches (`plannedFiles`), at package level. No test names, gate commands or build order: the Principal plans those in `plan.md`. Split by domain when the map demands it and record the ceiling.
+3. **Feasibility and size:** per scenario, the seam, fixtures, guards met and host needs; the packages and files the slice touches (`plannedFiles`), at package level. No test names, gate commands or build order: the implementer lead plans those. Split by domain when the map demands it and record the ceiling.
 4. **Package** at the lane's depth (PREPARATION *Delivery package*): dispositions, classes (cite Decision 032 §10 and fill the perimeter), setup proof. **Pre-mortem only for a transversal slice:** one consultant from another family, clean context.
 
 **Approval:** give the orchestrator the request content: the spec path and its commit SHA, the open decision round with options and your recommendation, and the paths of the assessments the project requires. No deck unless the owner asks for one (SPEC-LAYOUT *Slice approval*). The orchestrator sends it as an owner request. On approval, apply the 5.4 transition and recompute readiness; `implementable` is true only when every Zafir and project gate holds.

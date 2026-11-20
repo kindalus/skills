@@ -10,14 +10,14 @@ Because the excluded `.worktrees/` holds every live checkout, clean the main che
 
 ## Table
 
-`<slice>` is the lowercase slice ID (`s567`), which is also the swarm's `prefix`. `<task>` is the task's worktree name, the Principal's `worktree task --name` (`t01`). A review checkout's `<task>` is the reviewed task ID lowercased without its `<slice>-` head (`slice` for the deep slice review), and `-r<n>` is the review revision. `<id>` is the lowercase bug ID; `<n>` a number.
+`<slice>` is the lowercase slice ID (`s567`). `<task>` is the task's short name, chosen by the lead (`t01`). A review checkout's `<task>` is the reviewed task ID lowercased without its `<slice>-` head (`slice` for the deep slice review), and `-r<n>` is the review revision. `<id>` is the lowercase bug ID; `<n>` a number.
 
 | Element | Worktree | Branch | Herdr agent | Pane title | Workspace / tab |
 | --- | --- | --- | --- | --- | --- |
-| Swarm slice | `.worktrees/<slice>` | `slice/<slice>` | — | — | workspace label and tab `<slice>` |
-| Principal | the slice worktree | — | `<slice>-principal` | `<slice> · principal` | tab `<slice>` |
-| Reviewer | review checkouts `.worktrees/<slice>-review-<task>-r<n>` | — (detached) | `<slice>-reviewer` | `<slice> · reviewer` | tab `<slice>` |
-| Swarm task | `.worktrees/<slice>-<task>` | `task/<slice>/<task>` | — | — | — |
+| Slice | `.worktrees/<slice>` | `slice/<slice>` | — | — | workspace label and tab `<slice>`, opened from the repo's workspace |
+| Implementer lead | the slice worktree | — | `<slice>-lead` | `<slice> · lead` | tab `<slice>` |
+| Task | `.worktrees/<slice>-<task>` | `task/<slice>/<task>` | — | — | — |
+| Review checkout | `.worktrees/<slice>-review-<task>-r<n>` | — (detached) | — | — | — |
 | Preparer | `.worktrees/<slice>-preparation` | `prep/<slice>` | `<slice>-preparer` | `<slice> · preparer` | workspace label and tab `<slice> · preparation`, open while the preparer works and holding its pane, so the owner can follow it |
 | Orchestrator | — | — | `orchestrator` | `orchestrator` | tab `Orchestrator` |
 | Consultants | — | — | `consultant-claude`, `consultant-codex`, `consultant-agy` | `consultant-<cli> · free` or `consultant-<cli> · <slice>` | tab `Consultants` |
@@ -29,5 +29,5 @@ Because the excluded `.worktrees/` holds every live checkout, clean the main che
 ## Applying it
 
 - **Titles:** `herdr pane rename <pane_id> "<title>"` when the agent starts, and again whenever its work changes: a consultant at each grant (`· <slice>`) and release (`· free`), a bug executor at each new bug.
-- **Swarms:** the scripts derive the slice, task and review paths, branches and workspace labels from `repoPath` and `prefix`, and set the swarm's tab label and pane titles at bootstrap. A new launch contract may omit `worktreeRoot` and `slice`; one that names a path outside this layout is rejected.
+- **Grouping:** a worktree's workspace is grouped under the repo only when Herdr opens it from the repo's workspace (`herdr worktree create --cwd <repo>` or `herdr worktree open --workspace <repo workspace>`). `herdr workspace create --cwd <worktree>` makes a loose workspace: never use it for a worktree. Subagents get the lead's worktrees, never an isolated one their tool would create elsewhere.
 - **Detached checkouts** (review, admission): Herdr cannot create one, so run `git -C <repo> worktree add --detach <path> <sha>` and open it with `herdr worktree open`.

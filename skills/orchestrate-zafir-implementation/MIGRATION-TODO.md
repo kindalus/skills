@@ -26,5 +26,6 @@ Temporary. Delete this file, `implement-with-swarm` and `prepare-slices-with-age
 ## Removal
 
 - [x] Delete `implement-with-swarm` from this repo (2026-10-24).
-- [ ] Delete the installed copy `~/.agents/skills/implement-with-swarm` once no live run uses it as `skillRoot`.
+- [x] Delete the installed copy `~/.agents/skills/implement-with-swarm` (2026-11-20, no live run).
+- [x] Remove `swarm/` from this skill (2026-11-20): implementation is agnostic, by default `implement-with-subagents` ([Implementation](implementation/implementation.md)); the courier keeps reading past `swarm/3.x` spaces.
 - [ ] Delete `prepare-slices-with-agents` (Uwassi `.agents/skills/`) once no preparer runs under it.
