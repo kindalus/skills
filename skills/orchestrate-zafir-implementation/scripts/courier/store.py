@@ -1,4 +1,4 @@
-"""SQLite store of correio v2: one database per repository key, WAL, short IMMEDIATE transactions."""
+"""SQLite store of courier v2: one database per repository key, WAL, short IMMEDIATE transactions."""
 from __future__ import annotations
 
 import contextlib
@@ -17,7 +17,7 @@ from . import migrations
 BUSY_TIMEOUT_MS = 10000
 
 
-class CorreioError(RuntimeError):
+class CourierError(RuntimeError):
     """A refused operation; the message says why."""
 
 
@@ -101,14 +101,21 @@ def _close_lock_fd(fd: int, *, guarded: bool = False) -> None:
 
 
 def state_root() -> pathlib.Path:
-    key = os.environ.get("CORREIO_REPO_KEY", "uwassi")
+    key = os.environ.get("COURIER_REPO_KEY", "uwassi")
     base = pathlib.Path(os.environ.get("XDG_STATE_HOME") or pathlib.Path.home() / ".local/state")
     return base / "orchestrate-zafir-implementation" / key
 
 
+# The database's name before the courier's rename: used in place of courier.db while only it exists.
+LEGACY_DB_NAME = "correio.db"
+
+
 def default_db_path() -> pathlib.Path:
-    explicit = os.environ.get("CORREIO_DB")
-    return pathlib.Path(explicit) if explicit else state_root() / "correio.db"
+    explicit = os.environ.get("COURIER_DB")
+    if explicit:
+        return pathlib.Path(explicit)
+    path, legacy = state_root() / "courier.db", state_root() / LEGACY_DB_NAME
+    return legacy if not path.exists() and legacy.is_file() else path
 
 
 class Clock:
@@ -157,7 +164,7 @@ class Store:
         self.con.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
         mode = self.con.execute("PRAGMA journal_mode=WAL").fetchone()[0]
         if str(mode).lower() != "wal":
-            raise CorreioError(f"cannot enable WAL on {self.path}: {mode}")
+            raise CourierError(f"cannot enable WAL on {self.path}: {mode}")
         self.con.execute("PRAGMA synchronous=FULL")
         self.con.execute("PRAGMA foreign_keys=ON")
         self._depth = 0
@@ -170,7 +177,7 @@ class Store:
             row = self.con.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
             current = int(row[0]) if row else 0
             if current > migrations.LATEST:
-                raise CorreioError(f"database schema {current} is newer than this code ({migrations.LATEST})")
+                raise CourierError(f"database schema {current} is newer than this code ({migrations.LATEST})")
             for version, script in migrations.STEPS:
                 if version <= current:
                     continue
@@ -255,7 +262,7 @@ class Store:
         sets = ", ".join(f"{key}=?" for key in cols)
         cur = self.x(f"UPDATE members SET {sets} WHERE space_id=? AND agent=?", (*cols.values(), space_id, agent))
         if cur.rowcount != 1:
-            raise CorreioError(f"no member {agent} in space {space_id}")
+            raise CourierError(f"no member {agent} in space {space_id}")
 
     def message(self, message_id: str) -> dict[str, Any] | None:
         row = self.one("SELECT m.*, t.key AS thread FROM messages m JOIN threads t ON t.id=m.thread_id WHERE m.id=?",
@@ -302,7 +309,7 @@ class Store:
         current = self.task(space_id, task_id)
         if current is None:
             if "state" not in cols:
-                raise CorreioError("a new task needs a state")
+                raise CourierError("a new task needs a state")
             names = ["space_id", "task_id", "updated_by", "updated_at", *cols]
             self.x(f"INSERT INTO tasks({', '.join(names)}) VALUES ({', '.join('?' * len(names))})",
                    (space_id, task_id, by, self.now(), *cols.values()))
@@ -362,7 +369,7 @@ def _statements(script: str) -> list[str]:
             out.append(text)
             buf = []
     if "".join(buf).strip():
-        raise CorreioError("incomplete schema statement")
+        raise CourierError("incomplete schema statement")
     return out
 
 

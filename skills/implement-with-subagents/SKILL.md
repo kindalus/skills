@@ -65,4 +65,4 @@ These hold whatever the lead decides:
 
 State the request in the first line, with paths and sha256 for every file you cite. While a question is open, keep working on whatever does not depend on the answer.
 
-With the `orchestrate-zafir-implementation` courier (named in the brief), the channel is the `orq` space on the slice's own thread: a `PEDIDO` for each question and for each host request, with a subject that says which it is; an `ENTREGA` for results and for the handoff. Record the receipt of each message before acting on it.
+With the `orchestrate-zafir-implementation` courier (named in the brief), the channel is the `orch` space on the slice's own thread: a `REQUEST` for each question and for each host request, with a subject that says which it is; a `DELIVERY` for results and for the handoff. Record the receipt of each message before acting on it.

@@ -1,4 +1,4 @@
-"""Migration into correio.db: the v1 file mailbox, 2.7 swarm runs (read-only legacy spaces) and the JSONL
+"""Migration into courier.db: the v1 file mailbox, 2.7 swarm runs (read-only legacy spaces) and the JSONL
 host queue. Every importer is idempotent: a rerun adds what is new and refuses bytes that changed."""
 from __future__ import annotations
 
@@ -10,13 +10,14 @@ from typing import Any
 
 from . import envelope as env
 from . import library
-from .store import CorreioError, Store
+from .store import CourierError, Store
 
 V1_NAMESPACE = uuid.UUID("6f1b2c1e-4d0a-4a53-9d59-0f6c2f0f8a11")
-ROLE_BY_NAME = ((re.compile(r"^(orquestrador|orchestrator)$"), "orchestrator"),
-                (re.compile(r"^porta-voz$"), "spokesperson"),
+# The Portuguese names are those of v1 mail written before the agents' rename.
+ROLE_BY_NAME = ((re.compile(r"^(orchestrator|orquestrador)$"), "orchestrator"),
+                (re.compile(r"^(spokesperson|porta-voz)$"), "spokesperson"),
                 (re.compile(r"(preparer|preparador)"), "preparer"),
-                (re.compile(r"^(consultor|consultant)"), "consultant"),
+                (re.compile(r"^(consultant|consultor)"), "consultant"),
                 (re.compile(r"^(executor|bugs-)"), "executor"))
 EVENT_KEYS = {"id", "runId", "type", "from", "fromGeneration", "to", "sentAt", "payload"}
 
@@ -51,16 +52,19 @@ def _safe_text(value: Any, limit: int = 300) -> str:
 
 def _store_imported(store: Store, space: dict[str, Any], header: dict[str, Any], fields: dict[str, Any],
                     attachments: list[dict[str, Any]], body: str, delivery: str, source: str) -> tuple[bool, str]:
+    known = store.message(header["id"])
+    if known is not None and known["envelope"].startswith(f"---\n{env.LEGACY_MARKER}: ".encode()):
+        header = env.with_marker(header, env.LEGACY_MARKER)  # imported before the rename: same bytes as then
     data = env.emit(header, fields, attachments, body)
     parsed = env.parse(data)
-    existed = store.message(parsed["id"]) is not None
+    existed = known is not None
     library.store_message(store, space, data, parsed, delivery, imported_from=source)
     return not existed, parsed["id"]
 
 
 # -- v1 file mailbox ------------------------------------------------------------------------------------------------------
 def import_files(store: Store, root: pathlib.Path | str, *, space: str | None = None) -> dict[str, Any]:
-    """``correio/inbox/<agent>/*.json`` and ``receipts/<agent>/*.json`` of mail v1 into the orchestration space."""
+    """``<v1 root>/inbox/<agent>/*.json`` and ``receipts/<agent>/*.json`` of mail v1 into the orchestration space."""
     root = pathlib.Path(root).expanduser().resolve()
     space_id = library.resolve_space(store, space)
     sp = store.space(space_id)
@@ -74,7 +78,7 @@ def import_files(store: Store, root: pathlib.Path | str, *, space: str | None = 
         except (OSError, ValueError):
             pass
     with store.tx():
-        for agent in sorted(a for a in agents if a and a not in {"correio"} and env.NAME.match(a)):
+        for agent in sorted(a for a in agents if a and a not in library.COURIER_SENDERS and env.NAME.match(a)):
             if store.member(space_id, agent) is None:
                 library.add_member(store, space_id, agent, role_for(agent))
                 counts["members"] += 1
@@ -88,7 +92,7 @@ def import_files(store: Store, root: pathlib.Path | str, *, space: str | None = 
                     # Imported before: the v1 file is the identity. Unchanged, the stored envelope stays as it is
                     # (an attachment that changed since is a warning) and only the receipts below are new.
                     if known["fields"].get("legacySha256") != env.sha256(raw):
-                        raise CorreioError(f"v1 file changed since its import as {message_id}")
+                        raise CourierError(f"v1 file changed since its import as {message_id}")
                     for item in store.q("SELECT path, sha256, bytes FROM attachments WHERE message_id=?",
                                         (message_id,)):
                         warning = _attachment_drift(item)
@@ -110,8 +114,8 @@ def import_files(store: Store, root: pathlib.Path | str, *, space: str | None = 
                     attachments.append({"path": str(path), "sha256": str(body_file.get("sha256", "0" * 64)),
                                         "bytes": path.stat().st_size if path.is_file() else 0})
                     body = body or f"(corpo em anexo: {path})\n"
-                kind = v1.get("type") if v1.get("type") in module.TYPES else "INFO"
-                header = {"correio": env.CORREIO, "id": str(uuid.uuid5(V1_NAMESPACE, str(v1["id"]))),
+                kind = library.from_v1_type(sp, module, v1.get("type"))
+                header = {env.MARKER: env.COURIER, "id": str(uuid.uuid5(V1_NAMESPACE, str(v1["id"]))),
                           "space": space_id, "protocol": sp["protocol"], "version": sp["version"], "thread": thread,
                           "type": kind, "from": str(v1["from"]), "from_generation": None,
                           "to": message_path.parent.name, "in_reply_to": None, "sent_at": str(v1["sentAt"]),
@@ -120,7 +124,7 @@ def import_files(store: Store, root: pathlib.Path | str, *, space: str | None = 
                                                       module.TYPES[kind], str(message_path))
                 counts["messages" if created else "skipped"] += 1
                 _import_v1_receipt(store, root, message_path, message_id, counts)
-            except (OSError, ValueError, KeyError, TypeError, CorreioError) as exc:
+            except (OSError, ValueError, KeyError, TypeError, CourierError) as exc:
                 counts["errors"].append({"path": str(message_path), "error": str(exc)[:300]})
     return counts
 
@@ -149,7 +153,7 @@ def _import_v1_receipt(store: Store, root: pathlib.Path, message_path: pathlib.P
         message = store.message(message_id)
         store.x("INSERT INTO receipts(message_id, agent, accepted, disposition, message_sha256, "
                 "receipted_at) VALUES (?,?,?,?,?,?)",
-                (message_id, message["to_agent"], 1, str(v1r.get("disposition") or "recibo v1"),
+                (message_id, message["to_agent"], 1, str(v1r.get("disposition") or "v1 receipt"),
                  message["sha256"], str(v1r.get("receiptedAt") or store.now())))
         counts["receipts"] += 1
 
@@ -162,7 +166,7 @@ def import_run(store: Store, run_dir: pathlib.Path | str) -> dict[str, Any]:
     marker = json.loads((root / "automation.json").read_text(encoding="utf-8"))
     version = str(marker.get("automationVersion"))
     if version == "3.0.0":
-        raise CorreioError("a 3.0.0 run already lives in correio; nothing to import")
+        raise CourierError("a 3.0.0 run already lives in the courier; nothing to import")
     state_path = root / "state.json"
     state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.is_file() else {}
     space_id = str(launch["prefix"])
@@ -170,7 +174,7 @@ def import_run(store: Store, run_dir: pathlib.Path | str) -> dict[str, Any]:
     with store.tx():
         existing = store.space(space_id)
         if existing and (not existing["legacy"] or (existing["contract"] or {}).get("runId") != launch["runId"]):
-            raise CorreioError(f"space {space_id} exists and is not this run's legacy import")
+            raise CourierError(f"space {space_id} exists and is not this run's legacy import")
         sp = existing or library.create_space(
             store, space_id=space_id, kind="swarm", protocol="swarm", version=version, slice_id=launch.get("sliceId"),
             prefix=space_id, run_dir=str(root), repo_path=launch.get("repoPath"), base_sha=launch.get("baseSha"),
@@ -217,7 +221,7 @@ def import_run(store: Store, run_dir: pathlib.Path | str) -> dict[str, Any]:
                 body = ""
                 if structured:
                     body = "```json\n" + json.dumps(payload, indent=1, sort_keys=True, ensure_ascii=False) + "\n```\n"
-                header = {"correio": env.CORREIO, "id": str(event["id"]), "space": space_id, "protocol": "swarm",
+                header = {env.MARKER: env.COURIER, "id": str(event["id"]), "space": space_id, "protocol": "swarm",
                           "version": version, "thread": str(task or launch.get("sliceId") or space_id),
                           "type": str(event["type"]), "from": str(event["from"]),
                           "from_generation": event.get("fromGeneration") if isinstance(
@@ -237,14 +241,14 @@ def import_run(store: Store, run_dir: pathlib.Path | str) -> dict[str, Any]:
                         store.x("INSERT INTO receipts(message_id, agent, accepted, disposition, message_sha256, "
                                 "receipted_at) VALUES (?,?,?,?,?,?)",
                                 (message_id, message["to_agent"], int(bool(r.get("accepted"))),
-                                 str(r.get("disposition") or "recibo 2.7"), message["sha256"],
+                                 str(r.get("disposition") or "2.7 receipt"), message["sha256"],
                                  str(r.get("validatedAt") or store.now())))
                         counts["receipts"] += 1
                     if r.get("accepted") is True and event.get("type") in {"SLICE_ACCEPTED", "CANCEL"} and (
                             event["type"] == "SLICE_ACCEPTED" or event_path.parent.name.endswith("-principal")):
                         terminal = ("accepted" if event["type"] == "SLICE_ACCEPTED" else "cancelled",
                                     str(r.get("validatedAt") or store.now()))
-            except (OSError, ValueError, KeyError, TypeError, CorreioError) as exc:
+            except (OSError, ValueError, KeyError, TypeError, CourierError) as exc:
                 counts["errors"].append({"path": str(event_path), "error": str(exc)[:300]})
         snapshot = {"state": terminal[0] if terminal else str(state.get("state") or "running"),
                     "legacy": True, "automationVersion": version, "stateJson": str(state_path),
@@ -280,7 +284,7 @@ def import_jobs(store: Store, path: pathlib.Path | str) -> dict[str, Any]:
                     exit_code = int(match.group(1)) if match else None
                 if state not in {"queued", "running", "done"}:
                     raise ValueError(f"unknown state {raw_state!r}")
-                kind = str(row.get("kind")) if row.get("kind") in library.JOB_KINDS else "lote"
+                kind = library.job_kind(row.get("kind"))
                 store.x("INSERT INTO jobs(id, kind, who, cmd, priority, state, at, started_at, ended_at, exit) "
                         "VALUES (?,?,?,?,?,?,?,?,?,?)",
                         (str(row["id"]), kind, str(row.get("who", "")), str(row.get("cmd", "")), 0, state,

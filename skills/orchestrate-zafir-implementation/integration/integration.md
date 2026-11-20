@@ -15,7 +15,7 @@ The orchestrator is the single integrator into main. Zafir CONCURRENCY *Integrat
 4. **Gate plan.** The focused tests of the conflicting areas, then one whole gate on the combined tree under the exclusive host lease, run with the project's real command; record its log, exit and the protected host resources before and after in `J/gates/batch-<n>/`. On red, CONCURRENCY *Batches* step 8.
 5. **Close.** Fast-forward main to the batch branch (or `--no-ff`, per the project), with the documentation-only closure commit (register states, notes, metrics per element). If main moved, merge it into the batch branch and repeat from step 3 for what changed.
 6. **Push** main at batch close: this is the batch flow. Any other push goes to the owner.
-7. **Accept.** Tell each element's lead, on its thread, that the slice is accepted with the main SHA; export the slice's thread into its evidence (`correio export --space orq --thread <SLICE> --out <evidence dir>/correio`), release the dependents, log the batch with its SHA, and close the batch workspace with a plain `herdr workspace close`.
+7. **Accept.** Tell each element's lead, on its thread, that the slice is accepted with the main SHA; export the slice's thread into its evidence (`courier thread <SLICE> --space orch --json > <evidence dir>/courier-thread.json`), release the dependents, log the batch with its SHA, and close the batch workspace with a plain `herdr workspace close`.
 
 Done when main holds the batch, the push succeeded, and every element is accepted or returned with its finding.
 

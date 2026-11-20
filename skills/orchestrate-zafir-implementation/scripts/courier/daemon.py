@@ -4,7 +4,7 @@ It never validates semantics and never changes space or task state; it only read
 and writes its own tables (deliveries, observers, heartbeat). Per recipient it prompts the oldest
 unreceipted wake message, only while the agent is idle or done, retrying on a 30 s backoff doubling to
 480 s. A blocked or absent recipient gets a Herdr notification instead. Nothing is ever dropped: a wake
-message without a receipt for 2 h raises a notification and a PEDIDO to the orchestrator, and stays.
+message without a receipt for 2 h raises a notification and a request to the orchestrator, and stays.
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ import urllib.parse
 from typing import Any
 
 from . import library
-from .store import Clock, CorreioError, Store, parse_iso
+from .store import Clock, CourierError, Store, parse_iso
 
 STOP = False
 
@@ -35,10 +35,10 @@ class HerdrError(RuntimeError):
 
 
 class Herdr:
-    """The ``herdr`` CLI; ``$CORREIO_HERDR`` names another binary (tests use a fake)."""
+    """The ``herdr`` CLI; ``$COURIER_HERDR`` names another binary (tests use a fake)."""
 
     def __init__(self, binary: str | None = None):
-        self.binary = binary or os.environ.get("CORREIO_HERDR", "herdr")
+        self.binary = binary or os.environ.get("COURIER_HERDR", "herdr")
 
     def call(self, *argv: str, timeout: float = 15) -> dict[str, Any]:
         try:
@@ -68,9 +68,9 @@ class Options:
     max_backoff: float = 480.0
     escalate_after: float = 7200.0
     stuck_after: float = 120.0
-    watch_to: str = "orquestrador"
+    watch_to: str = "orchestrator"
     done_pattern: str = ""
-    quiet: tuple[str, ...] = ("porta-voz",)
+    quiet: tuple[str, ...] = ("spokesperson",)
     watch_ref: tuple[str, ...] = ()
     fetch_every: float = 60.0
     watch_runs: tuple[str, ...] = ()
@@ -152,10 +152,11 @@ class Courier:
         return self.store.clock.epoch()
 
     def mail(self, kind: str, subject: str, body: str, thread: str) -> None:
-        if self.opts.only_kind:  # the orchestration team reads the v1 mailbox again: no mail into correio
+        """``kind`` is ``request`` or ``delivery``; the space's protocol names its type."""
+        if self.opts.only_kind:  # the orchestration team reads the v1 mailbox again: no mail into the courier
             return
-        with contextlib.suppress(CorreioError):
-            library.system_mail(self.store, to=self.opts.watch_to, type=kind, subject=subject, body=body,
+        with contextlib.suppress(CourierError):
+            library.system_mail(self.store, to=self.opts.watch_to, kind=kind, subject=subject, body=body,
                                 thread=thread, space=self.opts.space)
 
     def observer(self, name: str) -> tuple[dict[str, Any], bool]:
@@ -182,7 +183,7 @@ class Courier:
 
     def readonly_copy(self, message: dict[str, Any]) -> pathlib.Path:
         """The envelope's exact bytes in a file a read-only agent can read (it cannot open the database)."""
-        directory = self.store.path.parent / "leitura" / message["to_agent"]
+        directory = self.store.path.parent / "readonly" / message["to_agent"]
         directory.mkdir(mode=0o700, parents=True, exist_ok=True)
         target = directory / f"{message['id']}.md"
         if not target.is_file() or target.read_bytes() != message["envelope"]:
@@ -269,7 +270,7 @@ class Courier:
                         if readonly:  # it cannot write its receipt: the courier records it, marked as its own
                             for message in [head, *infos]:
                                 library.receipt(self.store, message_id=message["id"], agent=agent_name,
-                                                disposition=library.READONLY_DISPOSITION, by="correio")
+                                                disposition=library.READONLY_DISPOSITION, by=library.COURIER)
                             action["action"] = "prompt-readonly"
                     attempts += 1
                     last = now
@@ -303,11 +304,11 @@ class Courier:
             hours = (now - sent) / 3600
             title = f"Correio: {message['to_agent']} sem recibo há {hours:.1f} h"
             self.herdr.notify(title, f"{message['type']} de {message['from_agent']}: {message['subject']}")
-            if message["to_agent"] != self.opts.watch_to and message["from_agent"] != "correio":
-                self.mail("PEDIDO", f"{message['to_agent']} sem recibo há {hours:.1f} h: {message['subject']}",
+            if message["to_agent"] != self.opts.watch_to and message["from_agent"] not in library.COURIER_SENDERS:
+                self.mail("request", f"{message['to_agent']} sem recibo há {hours:.1f} h: {message['subject']}",
                           f"{message['type']} {message['id']} ({message['space_id']}, {message['thread']}) de "
                           f"{message['from_agent']} para {message['to_agent']}, enviada {message['sent_at']}, ainda "
-                          f"sem recibo. Ver: {self.opts.cli} show {message['id']}", "correio/escalada")
+                          f"sem recibo. Ver: {self.opts.cli} show {message['id']}", "courier/escalation")
             with self.store.tx():
                 self.store.x("INSERT INTO deliveries(message_id, escalated_at) VALUES (?,?) ON CONFLICT(message_id) "
                              "DO UPDATE SET escalated_at=excluded.escalated_at", (message["id"], self.store.now()))
@@ -332,15 +333,15 @@ class Courier:
             if first or before is None or before == status or name in self.opts.quiet or name == self.opts.watch_to:
                 continue
             if status == "blocked":
-                self.mail("PEDIDO", f"{name} blocked",
+                self.mail("request", f"{name} blocked",
                           f"{name} ({agent.get('pane_id')}) passou de {before} a blocked: uma pergunta ou permissão "
-                          "espera resposta.", "correio/agentes")
+                          "espera resposta.", "courier/agents")
             elif before == "working" and status in {"done", "idle"} and (done_re is None or done_re.search(name)):
                 grant = self.active_grant(name)
                 if grant:
-                    self.mail("ENTREGA", f"{name} terminou ({grant})",
+                    self.mail("delivery", f"{name} terminou ({grant})",
                               f"{name} ({agent.get('pane_id')}) passou de working a {status} com a concessão {grant} "
-                              "activa. Lê o resultado no ecrã ou no transcript.", "correio/agentes")
+                              "activa. Lê o resultado no ecrã ou no transcript.", "courier/agents")
         for name in list(seen):
             if name not in current:
                 seen.pop(name)
@@ -361,9 +362,9 @@ class Courier:
                 continue
             warned[message["id"]] = self.store.now()
             if not first:
-                self.mail("PEDIDO", f"swarm {space['id']}: evento parado",
+                self.mail("request", f"swarm {space['id']}: evento parado",
                           f"{message['type']} {message['id']} para {message['to_agent']} sem recibo há "
-                          f"{int(now - sent)} s. Ver: {self.opts.cli} show {message['id']}", "correio/swarms")
+                          f"{int(now - sent)} s. Ver: {self.opts.cli} show {message['id']}", "courier/swarms")
         # Legacy 2.7 runs: their swarmd's status.json (the v1 safety net), until they close.
         for runs in self.opts.watch_runs:
             for status_path in pathlib.Path(runs).glob("*/supervision/status.json"):
@@ -381,10 +382,10 @@ class Courier:
                         # swarmd never prompts the orchestrator, so its own events surface here as mail (v1 6fa721c).
                         mine = event.get("to") == self.opts.watch_to
                         run = status_path.parent.parent.name
-                        self.mail("PEDIDO", f"swarm {run}: {event.get('type')} para ti" if mine
+                        self.mail("request", f"swarm {run}: {event.get('type')} para ti" if mine
                                   else f"swarm {run}: evento parado",
                                   f"{event.get('type')} para {event.get('to')} sem recibo há {int(now - sent)} s: "
-                                  f"{event.get('path')}", "correio/swarms")
+                                  f"{event.get('path')}", "courier/swarms")
         state["warned"] = {k: v for k, v in warned.items() if k in pending}
         self.save("swarm-stuck", state)
 
@@ -396,9 +397,9 @@ class Courier:
                 continue
             reported.add(row["id"])
             if not first:
-                self.mail("PEDIDO", f"job {row['id']} falhou ({row['who']})",
+                self.mail("request", f"job {row['id']} falhou ({row['who']})",
                           f"{row['kind']} de {row['who']} terminou com exit {row['exit']} às {row['ended_at']}: "
-                          f"{str(row['cmd'])[:400]}", "correio/jobs")
+                          f"{str(row['cmd'])[:400]}", "courier/jobs")
         state["reported"] = sorted(reported)
         self.save("jobs", state)
         for queue in self.opts.watch_jobs:
@@ -415,9 +416,9 @@ class Courier:
                             and job["id"] not in reported):
                         reported.add(job["id"])
                         if not first:
-                            self.mail("PEDIDO", f"job {job['id']} falhou ({job.get('who')})",
+                            self.mail("request", f"job {job['id']} falhou ({job.get('who')})",
                                       f"{job.get('kind')} de {job.get('who')} terminou com {job_state} às "
-                                      f"{job.get('endedAt')}: {str(job.get('cmd'))[:400]}", "correio/jobs")
+                                      f"{job.get('endedAt')}: {str(job.get('cmd'))[:400]}", "courier/jobs")
             state["reported"] = sorted(reported)
             self.save(name, state)
 
@@ -436,8 +437,8 @@ class Courier:
             if head and before and before != head and not first:
                 log = subprocess.run(["git", "-C", repo, "log", "--oneline", f"{before}..{head}"],
                                      capture_output=True, text=True, timeout=10).stdout.strip()
-                self.mail("ENTREGA", f"{ref} avançou para {head[:9]}", f"{repo} {ref}: {before[:9]} -> {head[:9]}\n"
-                          f"{log[:2000]}", "correio/main")
+                self.mail("delivery", f"{ref} avançou para {head[:9]}", f"{repo} {ref}: {before[:9]} -> {head[:9]}\n"
+                          f"{log[:2000]}", "courier/main")
             if head:
                 state["head"] = head
             self.save(name, state)
@@ -470,16 +471,16 @@ class Courier:
                 continue
             warned[key] = self.store.now()
             if not first:
-                self.mail("PEDIDO", f"swarm legacy {run_dir.name}: swarmd parado",
+                self.mail("request", f"swarm legacy {run_dir.name}: swarmd parado",
                           f"A run 2.7 {run_dir} está aberta e o swarmd não corre (status {status.get('checkedAt')}). "
                           f"Reinicia-o pelo runtime da run: {run_dir}/runtime/swarmd.py --run-dir {run_dir}",
-                          "correio/swarms")
+                          "courier/swarms")
         self.save("legacy-swarmd", state)
 
     def sync_v1(self) -> None:
         """While the cutover window is open, import what producers that still run the v1 code write (mail,
         receipts, queue lines), so the last manual import is not the last chance: the window closes only once
-        these syncs have stopped finding anything (``correio compat v1`` shows the last one)."""
+        these syncs have stopped finding anything (``courier compat v1`` shows the last one)."""
         if not (self.opts.sync_v1_root or self.opts.sync_v1_jobs) or not library.compat_v1(self.store)["active"]:
             return
         from . import importers
@@ -533,12 +534,14 @@ class Courier:
 
 
 def backup(store: Store, directory: pathlib.Path, day: dt.date, keep: int) -> pathlib.Path:
-    """Daily ``correio-<date>.db`` beside the database, keeping ``keep`` days."""
-    target = store.backup(directory / f"correio-{day.isoformat()}.db")
-    for old in directory.glob("correio-*.db"):
-        with contextlib.suppress(ValueError):
-            if (day - dt.date.fromisoformat(old.stem.removeprefix("correio-"))).days >= keep:
-                old.unlink()
+    """Daily ``courier-<date>.db`` beside the database, keeping ``keep`` days (``correio-<date>.db``, the name
+    before the rename, ages out the same way)."""
+    target = store.backup(directory / f"courier-{day.isoformat()}.db")
+    for prefix in ("courier-", "correio-"):
+        for old in directory.glob(f"{prefix}*.db"):
+            with contextlib.suppress(ValueError):
+                if (day - dt.date.fromisoformat(old.stem.removeprefix(prefix))).days >= keep:
+                    old.unlink()
     return target
 
 

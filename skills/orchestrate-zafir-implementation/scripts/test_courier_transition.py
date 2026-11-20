@@ -1,4 +1,4 @@
-"""The cutover and its rollback: v1 commands against correio v2 (a time-boxed compatibility window), v1 IDs in
+"""The cutover and its rollback: v1 commands against courier v2 (a time-boxed compatibility window), v1 IDs in
 receipts, and the conversion back to a v1 mailbox and the JSONL host queue that the v1 readers accept."""
 from __future__ import annotations
 
@@ -7,30 +7,30 @@ import os
 import pathlib
 import subprocess
 
-from correio import importers, library
-from correio.store import Store
-from correio_testing import CorreioCase
-import test_correio_importers as importer_tests  # not ``from ... import``: its tests would run twice
+from courier import importers, library
+from courier.store import Store
+from courier_testing import CourierCase
+import test_courier_importers as importer_tests  # not ``from ... import``: its tests would run twice
 
 HERE = pathlib.Path(__file__).resolve().parent
-V1_OPEN = "20261025T124243008032Z-91cfdfdb"  # the porta-voz ENTREGA to orquestrador, unreceipted in v1
+V1_OPEN = "20261025T124243008032Z-91cfdfdb"  # the spokesperson ENTREGA to orchestrator, unreceipted in v1
 
 
-class TransitionCase(CorreioCase):
+class TransitionCase(CourierCase):
     mailbox = importer_tests.V1ImportTest.mailbox
 
     def setUp(self) -> None:
         super().setUp()
         self.orchestration()
         self.v1_root = self.mailbox()
-        self.assertEqual(importers.import_files(self.store, self.v1_root, space="orq")["errors"], [])
+        self.assertEqual(importers.import_files(self.store, self.v1_root, space="orch")["errors"], [])
 
     def cli(self, *argv: str, check: bool = True, env: dict | None = None) -> subprocess.CompletedProcess:
-        return subprocess.run(["/usr/bin/python3", str(HERE / "correio.py"), *argv], text=True, capture_output=True,
+        return subprocess.run(["/usr/bin/python3", str(HERE / "courier.py"), *argv], text=True, capture_output=True,
                               env={**os.environ, **(env or {})}, check=check)
 
     def count(self) -> int:
-        store = Store(os.environ["CORREIO_DB"])
+        store = Store(os.environ["COURIER_DB"])
         try:
             return store.one("SELECT COUNT(*) FROM messages")[0]
         finally:
@@ -39,14 +39,14 @@ class TransitionCase(CorreioCase):
 
 class V1CommandsTest(TransitionCase):
     def test_imported_v1_ids_are_accepted_by_receipt_and_show(self) -> None:
-        shown = json.loads(self.cli("show", "--agent", "orquestrador", "--id", V1_OPEN, "--json").stdout)
+        shown = json.loads(self.cli("show", "--agent", "orchestrator", "--id", V1_OPEN, "--json").stdout)
         self.assertEqual(shown["fields"]["legacyId"], V1_OPEN)
-        done = json.loads(self.cli("receipt", "--agent", "orquestrador", "--id", V1_OPEN,
+        done = json.loads(self.cli("receipt", "--agent", "orchestrator", "--id", V1_OPEN,
                                    "--disposition", "tratado").stdout)
         self.assertEqual(done["message_id"], shown["id"])
         self.assertTrue(library.show(self.store, shown["id"])["receipt"]["accepted"])
         # A v1 ID names the message of that recipient only.
-        refused = self.cli("receipt", "--agent", "porta-voz", "--id", V1_OPEN, "--disposition", "x", check=False)
+        refused = self.cli("receipt", "--agent", "spokesperson", "--id", V1_OPEN, "--disposition", "x", check=False)
         self.assertEqual(refused.returncode, 2)
 
     def test_a_v1_send_fails_clearly_and_sends_nothing_outside_the_window(self) -> None:
@@ -54,7 +54,7 @@ class V1CommandsTest(TransitionCase):
         payload = self.temp / "payload.json"
         payload.write_text(json.dumps({"request": "REQUEST-15", "answers": {"Q?": "A"}}))
         for extra in ([], ["--payload-file", str(payload)]):
-            result = self.cli("send", "--from", "s606-preparer", "--to", "orquestrador", "--type", "ENTREGA",
+            result = self.cli("send", "--from", "s606-preparer", "--to", "orchestrator", "--type", "ENTREGA",
                               "--subject", "S606 pronto", "--body", "feito", *extra, check=False)
             self.assertEqual(result.returncode, 2)
             error = json.loads(result.stderr)["error"]
@@ -67,16 +67,17 @@ class V1CommandsTest(TransitionCase):
         self.assertTrue(window["active"])
         payload = self.temp / "payload.json"
         payload.write_text(json.dumps({"request": "REQUEST-15", "answers": {"Q?": "A"}}))
-        result = self.cli("send", "--from", "s606-preparer", "--to", "orquestrador", "--type", "ENTREGA",
+        result = self.cli("send", "--from", "s606-preparer", "--to", "orchestrator", "--type", "ENTREGA",
                           "--subject", "S606 pronto", "--body", "feito", "--payload-file", str(payload))
         sent = json.loads(result.stdout)
         self.assertEqual((sent["thread"], sent["compat"]), ("S606/REQUEST-15", "v1"))
         self.assertIn("v1 compatibility", result.stderr)
         message = library.show(self.store, sent["id"])
+        self.assertEqual(message["type"], "DELIVERY")  # the v1 ENTREGA, in the space's protocol
         self.assertEqual(json.loads(message["fields"]["answers"]), {"Q?": "A"})
         self.assertIn('"answers"', message["body"])
         self.cli("compat", "v1", "--off")
-        refused = self.cli("send", "--from", "s606-preparer", "--to", "orquestrador", "--type", "ENTREGA",
+        refused = self.cli("send", "--from", "s606-preparer", "--to", "orchestrator", "--type", "ENTREGA",
                            "--subject", "S606 outra", "--body", "x", check=False)
         self.assertEqual(refused.returncode, 2)
         self.assertIn("nothing was sent", refused.stderr)
@@ -84,83 +85,92 @@ class V1CommandsTest(TransitionCase):
 
 class RollbackTest(TransitionCase):
     def v1_pending(self, root: pathlib.Path, agent: str) -> list[str]:
-        result = self.cli("legacy", "pending", "--agent", agent, env={"CORREIO_ROOT": str(root)})
+        result = self.cli("legacy", "pending", "--agent", agent, env={"COURIER_ROOT": str(root)})
         return [m["id"] for m in json.loads(result.stdout)["pending"]]
 
     def test_the_export_is_a_v1_mailbox_the_v1_reader_accepts(self) -> None:
-        native = self.send(sender="s606-preparer", to="orquestrador", type="ENTREGA", subject="S606 pronto",
+        native = self.send(sender="s606-preparer", to="orchestrator", type="DELIVERY", subject="S606 pronto",
                            body="feito")["id"]
-        handled = self.send(sender="orquestrador", to="s606-preparer", subject="S606 faz")["id"]
+        handled = self.send(sender="orchestrator", to="s606-preparer", subject="S606 faz")["id"]
         library.receipt(self.store, message_id=handled, agent="s606-preparer", disposition="a fazer")
         questions = json.dumps([{"question": "Q?", "options": [{"label": "A"}, {"label": "B"}]}])
-        ask = self.send(sender="orquestrador", to="porta-voz", type="OWNER_QUESTION", thread="S606/REQUEST-15",
+        ask = self.send(sender="orchestrator", to="spokesperson", type="OWNER_QUESTION", thread="S606/REQUEST-15",
                         fields={"askUserQuestion": questions, "request": "REQUEST-15"})["id"]
         empty = self.temp / "v1-novo"
-        result = library.export_v1(self.store, "orq", empty)
+        result = library.export_v1(self.store, "orch", empty)
         self.assertEqual(result["errors"], [])
-        inbox = self.v1_pending(empty, "orquestrador")
+        inbox = self.v1_pending(empty, "orchestrator")
         native_v1 = self.store.message(native)["sent_at"]
-        self.assertEqual(len(inbox), 4)  # the three unreceipted v1 imports and the v2 ENTREGA
+        self.assertEqual(len(inbox), 4)  # the three unreceipted v1 imports and the v2 DELIVERY
         self.assertTrue(any(i.endswith("-" + native.replace("-", "")) for i in inbox), (inbox, native_v1))
         self.assertEqual(self.v1_pending(empty, "s606-preparer"), [])  # receipted in v2: not asked again
-        (question,) = self.v1_pending(empty, "porta-voz")
-        shown = json.loads(self.cli("legacy", "show", "--agent", "porta-voz", "--id", question,
-                                    env={"CORREIO_ROOT": str(empty)}).stdout)
+        (question,) = self.v1_pending(empty, "spokesperson")
+        shown = json.loads(self.cli("legacy", "show", "--agent", "spokesperson", "--id", question,
+                                    env={"COURIER_ROOT": str(empty)}).stdout)
         self.assertEqual((shown["type"], shown["payload"]["askUserQuestion"][0]["question"],
-                          shown["correioV2"]["id"], shown["correioV2"]["type"]), ("PEDIDO", "Q?", ask, "OWNER_QUESTION"))
-        self.cli("legacy", "receipt", "--agent", "porta-voz", "--id", question, "--disposition", "ok",
-                 env={"CORREIO_ROOT": str(empty)})
-        self.assertEqual(self.v1_pending(empty, "porta-voz"), [])
+                          shown["courierV2"]["id"], shown["courierV2"]["type"]), ("PEDIDO", "Q?", ask, "OWNER_QUESTION"))
+        self.cli("legacy", "receipt", "--agent", "spokesperson", "--id", question, "--disposition", "ok",
+                 env={"COURIER_ROOT": str(empty)})
+        self.assertEqual(self.v1_pending(empty, "spokesperson"), [])
 
     def test_exporting_into_the_live_v1_mailbox_repeats_nothing_and_loses_nothing(self) -> None:
-        library.receipt(self.store, message_id=V1_OPEN, agent="orquestrador", disposition="tratado no v2")
-        native = self.send(sender="s606-preparer", to="orquestrador", type="ENTREGA", subject="S606 novo")["id"]
+        library.receipt(self.store, message_id=V1_OPEN, agent="orchestrator", disposition="tratado no v2")
+        native = self.send(sender="s606-preparer", to="orchestrator", type="DELIVERY", subject="S606 novo")["id"]
         files = lambda: sorted(p.relative_to(self.v1_root) for p in self.v1_root.rglob("*.json"))
         before = files()
-        first = library.export_v1(self.store, "orq", self.v1_root)
-        self.assertEqual((first["messages"], first["receipts"]), (1, 1))  # the new ENTREGA; V1_OPEN's v2 receipt
-        pending = self.v1_pending(self.v1_root, "orquestrador")
+        first = library.export_v1(self.store, "orch", self.v1_root)
+        self.assertEqual((first["messages"], first["receipts"]), (1, 1))  # the new DELIVERY; V1_OPEN's v2 receipt
+        pending = self.v1_pending(self.v1_root, "orchestrator")
         self.assertNotIn(V1_OPEN, pending)
         self.assertEqual(len([p for p in pending if p.endswith("-" + native.replace("-", ""))]), 1)
         self.assertTrue(set(before) <= set(files()))
         after = files()
-        again = library.export_v1(self.store, "orq", self.v1_root)  # rerun after the CLI swap: only what is new
+        again = library.export_v1(self.store, "orch", self.v1_root)  # rerun after the CLI swap: only what is new
         self.assertEqual((again["messages"], again["receipts"]), (0, 0))
         self.assertEqual(files(), after)
         library.create_space(self.store, space_id="s900", kind="swarm", protocol="swarm", version="2.7.0",
                              contract={"runId": "x"}, legacy=True)
-        with self.assertRaisesRegex(library.CorreioError, "orchestration"):
+        with self.assertRaisesRegex(library.CourierError, "orchestration"):
             library.export_v1(self.store, "s900", self.temp / "x")
+
+    def test_a_file_exported_before_the_rename_is_still_this_message(self) -> None:
+        native = self.send(sender="s606-preparer", to="orchestrator", type="DELIVERY", subject="S606 antes")["id"]
+        out = self.temp / "v1-before"
+        library.export_v1(self.store, "orch", out)
+        path = out / "inbox" / "orchestrator" / f"{library.v1_id(self.store.message(native))}.json"
+        path.write_text(path.read_text().replace('"courierV2"', '"correioV2"'))
+        again = library.export_v1(self.store, "orch", out)
+        self.assertEqual((again["messages"], again["errors"]), (0, []))
 
     def test_a_legacy_id_is_trusted_only_from_an_import_and_a_collision_fails(self) -> None:
         # A native message that carries the same legacyId as an imported one, to the same recipient, unreceipted.
-        imported = library.resolve_message(self.store, V1_OPEN, "orquestrador")
-        library.receipt(self.store, message_id=imported, agent="orquestrador", disposition="tratado")
-        native = self.send(sender="porta-voz", to="orquestrador", type="ENTREGA", subject="outra",
+        imported = library.resolve_message(self.store, V1_OPEN, "orchestrator")
+        library.receipt(self.store, message_id=imported, agent="orchestrator", disposition="tratado")
+        native = self.send(sender="spokesperson", to="orchestrator", type="DELIVERY", subject="outra",
                            fields={"legacyId": V1_OPEN})["id"]
-        self.assertEqual(library.resolve_message(self.store, V1_OPEN, "orquestrador"), imported)
+        self.assertEqual(library.resolve_message(self.store, V1_OPEN, "orchestrator"), imported)
         out = self.temp / "v1-colisao"
-        library.export_v1(self.store, "orq", out)
-        pending = self.v1_pending(out, "orquestrador")
+        library.export_v1(self.store, "orch", out)
+        pending = self.v1_pending(out, "orchestrator")
         self.assertNotIn(V1_OPEN, pending)  # the imported one, receipted
         self.assertIn(library.v1_id(self.store.message(native)), pending)  # the native one keeps its own id
-        receipt = json.loads((out / "receipts" / "orquestrador" / f"{V1_OPEN}.json").read_text())
-        self.assertEqual(receipt["correioV2"]["id"], imported)
+        receipt = json.loads((out / "receipts" / "orchestrator" / f"{V1_OPEN}.json").read_text())
+        self.assertEqual(receipt["courierV2"]["id"], imported)
         # A file at the target that is another message: explicit failure, nothing written.
         foreign = self.temp / "v1-alheia"
-        target = foreign / "inbox" / "orquestrador" / f"{V1_OPEN}.json"
+        target = foreign / "inbox" / "orchestrator" / f"{V1_OPEN}.json"
         target.parent.mkdir(parents=True)
-        target.write_text(json.dumps({"id": V1_OPEN, "from": "x", "to": "orquestrador", "type": "PEDIDO",
+        target.write_text(json.dumps({"id": V1_OPEN, "from": "x", "to": "orchestrator", "type": "PEDIDO",
                                       "subject": "outra coisa", "sentAt": "2026-10-25T00:00:00Z", "body": "?"}))
-        with self.assertRaisesRegex(library.CorreioError, "collision, nothing exported"):
-            library.export_v1(self.store, "orq", foreign)
+        with self.assertRaisesRegex(library.CourierError, "collision, nothing exported"):
+            library.export_v1(self.store, "orch", foreign)
         self.assertEqual(sorted(p.name for p in foreign.rglob("*.json")), [f"{V1_OPEN}.json"])
         # A receipt file that belongs to other bytes is a collision too.
-        library.export_v1(self.store, "orq", self.v1_root)
-        receipt_path = self.v1_root / "receipts" / "orquestrador" / f"{V1_OPEN}.json"
+        library.export_v1(self.store, "orch", self.v1_root)
+        receipt_path = self.v1_root / "receipts" / "orchestrator" / f"{V1_OPEN}.json"
         receipt_path.write_text(json.dumps({"id": V1_OPEN, "messageSha256": "0" * 64}))  # another file's
-        with self.assertRaisesRegex(library.CorreioError, "is not the receipt of"):
-            library.export_v1(self.store, "orq", self.v1_root)
+        with self.assertRaisesRegex(library.CourierError, "is not the receipt of"):
+            library.export_v1(self.store, "orch", self.v1_root)
 
     def test_a_v1_append_during_the_export_is_kept(self) -> None:
         # The v1 producer (rollback/lease-queue-v1.sh add) appends under flock on <jsonl>.lock; the export reads
@@ -202,13 +212,13 @@ class RollbackTest(TransitionCase):
         library.jobs_start(self.store, done["id"])
         library.jobs_finish(self.store, done["id"], 3)
         urgent = library.jobs_add(self.store, kind="gate", who="s605", cmd="d", priority=1)
-        later = library.jobs_add(self.store, kind="janela", who="s619", cmd="e")
+        later = library.jobs_add(self.store, kind="window", who="s619", cmd="e")
         with queue.open("a") as out:  # added by the v1 script after the swap back, before the second export
             out.write(json.dumps({"id": "v1new", "at": "2026-10-26T09:00:00Z", "kind": "lote", "who": "s620",
                                   "cmd": "f", "state": "queued"}) + "\n")
-        running = library.jobs_add(self.store, kind="lote", who="s700", cmd="g")
+        running = library.jobs_add(self.store, kind="batch", who="s700", cmd="g")
         library.jobs_start(self.store, running["id"])
-        with self.assertRaisesRegex(library.CorreioError, "is running"):
+        with self.assertRaisesRegex(library.CourierError, "is running"):
             library.export_jobs(self.store, queue)
         library.jobs_finish(self.store, running["id"], 0)
         result = library.export_jobs(self.store, queue)
@@ -224,9 +234,9 @@ class RollbackTest(TransitionCase):
 
     def test_the_cli_exports_both(self) -> None:
         out = self.temp / "v1-cli"
-        result = json.loads(self.cli("export-v1", "--space", "orq", "--root", str(out)).stdout)
+        result = json.loads(self.cli("export-v1", "--space", "orch", "--root", str(out)).stdout)
         self.assertEqual((result["messages"], result["errors"]), (4, []))
-        self.assertEqual(len(self.v1_pending(out, "orquestrador")), 3)
+        self.assertEqual(len(self.v1_pending(out, "orchestrator")), 3)
         library.jobs_add(self.store, kind="gate", who="s1", cmd="x")
         jobs = json.loads(self.cli("export-jobs", "--file", str(self.temp / "q.jsonl")).stdout)
         self.assertEqual(jobs["rows"], 1)

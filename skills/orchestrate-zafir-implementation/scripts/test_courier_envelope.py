@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import unittest
 
-from correio import envelope as env
+from courier import envelope as env
 
-HEADER = {"correio": 2, "id": "3e47dbe8-af70-4acd-8671-41ff97accd29", "space": "s617", "protocol": "swarm",
+HEADER = {"courier": 2, "id": "3e47dbe8-af70-4acd-8671-41ff97accd29", "space": "s617", "protocol": "swarm",
           "version": "3.0.0", "thread": "S617/T03", "type": "BLOCKED", "from": "s617-principal",
-          "from_generation": 1, "to": "orquestrador", "in_reply_to": None,
+          "from_generation": 1, "to": "orchestrator", "in_reply_to": None,
           "sent_at": "2026-10-25T14:30:00.123456Z", "subject": "T03: censo do guard de substrato abaixo do piso"}
 FIELDS = {"taskId": "S617-T03", "assignmentId": "61c4fde4-878c-4fd6-a2d1-9643226e51cf", "revision": 1,
           "candidateSha": "f6b5c63d402fd18471c25d724f25f813da748548", "close": True, "note": None,
@@ -26,13 +26,27 @@ class EnvelopeTest(unittest.TestCase):
         self.assertEqual(again, data)
         self.assertEqual(env.sha256(again), env.sha256(data))
         text = data.decode()
-        self.assertTrue(text.startswith("---\ncorreio: 2\nid: 3e47dbe8"))
+        self.assertTrue(text.startswith("---\ncourier: 2\nid: 3e47dbe8"))
         self.assertIn('subject: "T03: censo', text)  # ": " forces quotes
         self.assertIn("thread: S617/T03\n", text)  # a safe plain scalar stays plain
         self.assertIn('  count: "12"\n', text)  # a string that looks like an integer is quoted
         self.assertIn('  word: "null"\n', text)
         self.assertIn("  neg: -3\n", text)
         self.assertLess(text.index("  assignmentId"), text.index("  taskId"))  # fields in sorted order
+
+    def test_an_envelope_written_before_the_rename_parses_and_keeps_its_bytes(self) -> None:
+        new = env.emit(HEADER, FIELDS, ATTACHMENTS, "body\n")
+        old = new.replace(b"---\ncourier: 2\n", b"---\ncorreio: 2\n", 1)
+        parsed = env.parse(old)
+        self.assertEqual(parsed["correio"], 2)
+        self.assertNotIn("courier", parsed)
+        legacy = env.with_marker(HEADER, env.LEGACY_MARKER)
+        self.assertEqual(list(legacy), list(env.header_keys(legacy=True)))
+        self.assertEqual(env.emit(legacy, FIELDS, ATTACHMENTS, "body\n"), old)
+        self.assertEqual(env.emit({k: parsed[k] for k in legacy}, parsed["fields"], parsed["attachments"],
+                                  parsed["body"]), old)
+        with self.assertRaises(env.EnvelopeError):
+            env.emit({**HEADER, "correio": 2}, {}, [], "")  # one marker, never both
 
     def test_empty_maps_and_bodies(self) -> None:
         data = env.emit(HEADER, {}, [], "")
@@ -62,7 +76,9 @@ class EnvelopeTest(unittest.TestCase):
             "multiline string": good.replace('subject: "T03', 'subject: |\n  T03'),
             "no close": good.replace("---\nbody", "body"),
             "bad uuid": good.replace("id: 3e47dbe8-af70", "id: 3E47DBE8-af70"),
-            "version 1": good.replace("correio: 2", "correio: 1"),
+            "version 1": good.replace("courier: 2", "courier: 1"),
+            "legacy version 1": good.replace("courier: 2", "correio: 1"),
+            "other marker": good.replace("courier: 2", "mail: 2"),
         }
         for name, text in mutations.items():
             with self.subTest(name=name):

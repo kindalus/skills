@@ -1,4 +1,4 @@
-"""Correio v1 (legacy, kept for rollback): durable mailbox and courier for the agents outside a swarm (orchestrator, spokesperson,
+"""Courier v1 (legacy, kept for rollback): durable mailbox and courier for the agents outside a swarm (orchestrator, spokesperson,
 preparers, consultants, bug executors).
 
 Every message is a file in inbox/<recipient>/; a receipt in receipts/<recipient>/ closes it. The courier
@@ -6,17 +6,18 @@ delivers each recipient's oldest unreceipted message (FIFO) by `herdr agent prom
 recipient is idle or done; a blocked or absent recipient gets a Herdr notification instead. It retries
 with backoff (30 s doubling, 480 s ceiling) and never gives up: the file stays until it is receipted.
 
-Run it as ``correio.py legacy <subcommand>``.
+Run it as ``courier.py legacy <subcommand>``.
 
-  correio.py legacy send --from A --to B --type PEDIDO|ENTREGA|INFO --subject S (--body TEXT | --body-file F)
+  courier.py legacy send --from A --to B --type PEDIDO|ENTREGA|INFO --subject S (--body TEXT | --body-file F)
                   [--payload-file JSON]
-  correio.py receipt --agent B --id ID --disposition TEXT
-  correio.py pending --agent B
-  correio.py show --agent B --id ID
-  correio.py daemon [--interval 10] [--retry-min 30] [--max-backoff 480]
+  courier.py receipt --agent B --id ID --disposition TEXT
+  courier.py pending --agent B
+  courier.py show --agent B --id ID
+  courier.py daemon [--interval 10] [--retry-min 30] [--max-backoff 480]
 
-The root is $CORREIO_ROOT or ~/.local/state/orchestrate-zafir-implementation/<repo-key>/correio, with
-<repo-key> from $CORREIO_REPO_KEY (default: uwassi).
+The root is $COURIER_ROOT or ~/.local/state/orchestrate-zafir-implementation/<repo-key>/correio, with
+<repo-key> from $COURIER_REPO_KEY (default: uwassi). The v1 format is frozen as v1 wrote it, before the
+courier's rename: the types PEDIDO and ENTREGA, the sender correio, the root folder correio/ and its dispositions.
 """
 from __future__ import annotations
 
@@ -42,10 +43,10 @@ STOP = False
 
 
 def root_dir() -> pathlib.Path:
-    explicit = os.environ.get("CORREIO_ROOT")
+    explicit = os.environ.get("COURIER_ROOT")
     if explicit:
         return pathlib.Path(explicit)
-    key = os.environ.get("CORREIO_REPO_KEY", "uwassi")
+    key = os.environ.get("COURIER_REPO_KEY", "uwassi")
     return pathlib.Path.home() / ".local/state/orchestrate-zafir-implementation" / key / "correio"
 
 
@@ -167,7 +168,7 @@ def cmd_show(args: argparse.Namespace) -> None:
 
 
 def herdr(*argv: str, timeout: float = 15) -> dict[str, Any]:
-    binary = os.environ.get("CORREIO_HERDR", "herdr")
+    binary = os.environ.get("COURIER_HERDR", "herdr")
     proc = subprocess.run([binary, *argv], capture_output=True, text=True, timeout=timeout)
     if proc.returncode != 0:
         raise RuntimeError(proc.stderr.strip() or proc.stdout.strip() or f"herdr exit {proc.returncode}")
@@ -181,7 +182,7 @@ def delay_for(attempts: int, minimum: float, ceiling: float) -> float:
 
 
 def prompt_text(root: pathlib.Path, message: dict[str, Any], queued: int, readonly: bool = False) -> str:
-    me = f"{pathlib.Path(__file__).resolve().parent.parent / 'correio.py'} legacy"
+    me = f"{pathlib.Path(__file__).resolve().parent.parent / 'courier.py'} legacy"
     tail = f" (+{queued} na fila)" if queued else ""
     if readonly:  # a sandboxed agent cannot write receipts or mail: the courier receipts, it answers in its text
         return (f"Correio {message['type']} de {message['from']}: {message['subject']}{tail}. "
@@ -190,7 +191,7 @@ def prompt_text(root: pathlib.Path, message: dict[str, Any], queued: int, readon
     return (f"Correio {message['type']} de {message['from']}: {message['subject']}{tail}. "
             f"Lê {message['path']}. Antes de agir, regista o recibo: "
             f"python3 {me} receipt --agent {message['to']} --id {message['id']} --disposition '<o que fazes>'. "
-            "Responde pela tua caixa de correio (correio.py send), nunca por herdr agent prompt.")
+            "Responde pela tua caixa de correio (courier.py send), nunca por herdr agent prompt.")
 
 
 def system_mail(root: pathlib.Path, to: str, kind: str, subject: str, body: str) -> None:
@@ -355,7 +356,7 @@ def cmd_daemon(args: argparse.Namespace) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="correio.py legacy", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(prog="courier.py legacy", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("send")
     p.add_argument("--from", dest="sender", required=True)
@@ -382,10 +383,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--interval", type=float, default=10.0)
     p.add_argument("--retry-min", type=float, default=30.0)
     p.add_argument("--max-backoff", type=float, default=480.0)
-    p.add_argument("--watch-to", default="", help="agent that receives the observer mail (e.g. orquestrador)")
+    p.add_argument("--watch-to", default="", help="agent that receives the observer mail (e.g. orchestrator)")
     p.add_argument("--done-pattern", default="", help="regex of agent names whose working→done/idle is mailed")
     p.add_argument("--readonly", default="", help="regex of sandboxed agents: the courier receipts on delivery")
-    p.add_argument("--quiet", default="porta-voz", help="comma list of agents whose transitions are not mailed")
+    p.add_argument("--quiet", default="spokesperson", help="comma list of agents whose transitions are not mailed")
     p.add_argument("--watch-ref", action="append", default=[], help="REPO:REF whose advance is mailed (repeatable)")
     p.add_argument("--fetch-every", type=float, default=60.0)
     p.add_argument("--watch-runs", action="append", default=[], help="swarm runs/ directory to watch for stuck events")

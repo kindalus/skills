@@ -1,4 +1,4 @@
-"""Schema migrations of correio.db. Append a new step; never edit a published one."""
+"""Schema migrations of courier.db. Append a new step; never edit a published one."""
 from __future__ import annotations
 
 SCHEMA_V1 = """

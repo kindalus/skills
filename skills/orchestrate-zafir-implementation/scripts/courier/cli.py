@@ -1,4 +1,4 @@
-"""correio: one mail system for the orchestration team and the swarms (correio v2).
+"""courier: one mail system for the orchestration team and the swarms (courier v2).
 
   space create|close|show|list      member add|update|leave
   send                              receipt (one, or --all-info)
@@ -7,7 +7,8 @@
   jobs add|next|start|attach|finish|recover|list   daemon, watchdog, backup
   legacy <v1 subcommand>            the v1 file mailbox, kept for rollback
 
-The database is $CORREIO_DB or ~/.local/state/orchestrate-zafir-implementation/<$CORREIO_REPO_KEY>/correio.db.
+The database is $COURIER_DB or ~/.local/state/orchestrate-zafir-implementation/<$COURIER_REPO_KEY>/courier.db
+(correio.db, its name before the rename, while only that one exists).
 Writes print one JSON object; errors print {"error": ...} on stderr and exit 2.
 """
 from __future__ import annotations
@@ -21,7 +22,7 @@ import sys
 from typing import Any
 
 from . import daemon, importers, library
-from .store import CorreioError, Store, default_db_path
+from .store import CourierError, Store, default_db_path
 
 FIELD = re.compile(r"^([A-Za-z][A-Za-z0-9_]{0,63})(:?=)(.*)$", re.S)
 
@@ -30,14 +31,14 @@ def parse_field(raw: str) -> tuple[str, Any]:
     """``k=v`` is a string; ``k:=<json>`` a JSON value, structured ones kept as canonical JSON text."""
     match = FIELD.match(raw)
     if not match:
-        raise CorreioError(f"--field takes key=value or key:=json, not {raw!r}")
+        raise CourierError(f"--field takes key=value or key:=json, not {raw!r}")
     key, op, value = match.groups()
     if op == "=":
         return key, value
     try:
         decoded = json.loads(value)
     except json.JSONDecodeError as exc:
-        raise CorreioError(f"--field {key}:= needs valid JSON") from exc
+        raise CourierError(f"--field {key}:= needs valid JSON") from exc
     return key, _field_value(decoded)
 
 
@@ -50,18 +51,18 @@ def _field_value(decoded: Any) -> Any:
 def parse_field_file(raw: str) -> tuple[str, Any]:
     key, sep, path = raw.partition("=")
     if not sep or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,63}", key):
-        raise CorreioError(f"--field-file takes key=path, not {raw!r}")
+        raise CourierError(f"--field-file takes key=path, not {raw!r}")
     try:
         return key, _field_value(json.loads(pathlib.Path(path).read_text(encoding="utf-8")))
     except (OSError, json.JSONDecodeError) as exc:
-        raise CorreioError(f"--field-file {key}: {exc}") from exc
+        raise CourierError(f"--field-file {key}: {exc}") from exc
 
 
 def out(value: Any) -> None:
     print(json.dumps(value, ensure_ascii=False, sort_keys=True, default=str))
 
 
-# Only these create correio.db when it is missing; every other command (reading, send, receipt, jobs, ...) needs
+# Only these create courier.db when it is missing; every other command (reading, send, receipt, jobs, ...) needs
 # an existing database and fails without creating one: a command run against the wrong path must not leave an
 # empty base there (the canary's agents once created one at the live path).
 CREATES_DB = {("space", "create"), ("import-files", None), ("import-run", None), ("import-jobs", None),
@@ -72,8 +73,8 @@ def store_from(args: argparse.Namespace) -> Store:
     path = pathlib.Path(args.db or default_db_path())
     sub = getattr(args, "space_command", None) if args.command == "space" else None
     if not path.is_file() and (args.command, sub) not in CREATES_DB:
-        raise CorreioError(f"no correio database at {path}: nothing was created. Name the right one with --db <path> "
-                           "(or CORREIO_DB=<path>); only space create, import-files/run/jobs and daemon create it")
+        raise CourierError(f"no courier database at {path}: nothing was created. Name the right one with --db <path> "
+                           "(or COURIER_DB=<path>); only space create, import-files/run/jobs and daemon create it")
     return Store(path)
 
 
@@ -157,7 +158,7 @@ def cmd_space(args: argparse.Namespace, store: Store) -> Any:
     if args.space_command == "show":
         space = store.space(args.space)
         if space is None:
-            raise CorreioError(f"no space {args.space}")
+            raise CourierError(f"no space {args.space}")
         return {**space, "state": store.space_state(args.space), "members": store.members(args.space, include_left=True),
                 "tasks": store.tasks(args.space)}
     return library.list_spaces(store, open_only=args.open)
@@ -187,12 +188,12 @@ def cmd_member(args: argparse.Namespace, store: Store) -> Any:
 
 def cmd_send(args: argparse.Namespace, store: Store) -> Any:
     if args.body is not None and args.body_file is not None:
-        raise CorreioError("give --body or --body-file, not both")
+        raise CourierError("give --body or --body-file, not both")
     body = args.body or ""
     if args.body_file:
         path = pathlib.Path(args.body_file)
         if path.stat().st_size > 900 * 1024:
-            raise CorreioError("body file is too large for an envelope; send it with --attach")
+            raise CourierError("body file is too large for an envelope; send it with --attach")
         body = path.read_text(encoding="utf-8")
     fields: dict[str, Any] = {}
     for raw in args.field:
@@ -206,30 +207,32 @@ def cmd_send(args: argparse.Namespace, store: Store) -> Any:
         if value is not None:
             fields[key] = value
     space = library.resolve_space(store, args.space)
-    thread, compat = args.thread, None
+    thread, compat, kind = args.thread, None, args.type
     sp = store.space(space)
     if (thread is None or args.payload_file) and sp and sp["kind"] == "orchestration":
         # The v1 form: no --thread, and structure in --payload-file. It works only inside the cutover window.
         if not library.compat_v1(store)["active"]:
-            raise CorreioError(
-                "correio v2: send needs --thread (the slice or the request: S606, S606/REQUEST-15 or geral) and "
+            raise CourierError(
+                "courier v2: send needs --thread (the slice or the request: S606, S606/REQUEST-15 or general) and "
                 "takes fields with --field/--field-file, not --payload-file; the v1 form ended at the cutover, so "
                 "nothing was sent. Send again in the v2 form (references/operations.md, Mail).")
         payload: dict[str, Any] = {}
         if args.payload_file:
             payload = json.loads(pathlib.Path(args.payload_file).read_text(encoding="utf-8"))
             if not isinstance(payload, dict):
-                raise CorreioError("--payload-file must hold a JSON object; nothing was sent")
+                raise CourierError("--payload-file must hold a JSON object; nothing was sent")
             scalars, structured = importers._scalar_split(payload)
             fields = {**scalars, **fields}
             if structured:
                 body += "\n```json\n" + json.dumps(payload, indent=1, sort_keys=True, ensure_ascii=False) + "\n```\n"
         thread = thread or library.infer_thread(args.subject, body, payload)
         compat = "v1"
+        v1_kind = {library.V1_REQUEST: "request", library.V1_DELIVERY: "delivery"}.get(kind)
+        kind = (library.mail_type(sp, v1_kind) or kind) if v1_kind else kind  # a v1 PEDIDO in this protocol
         print(json.dumps({"warning": f"v1 compatibility: thread {thread}; from now on send with --thread "
                                      "and --field (references/operations.md, Mail)"}, ensure_ascii=False),
               file=sys.stderr)
-    result = library.send(store, space=space, sender=args.sender, to=args.to, type=args.type, thread=thread,
+    result = library.send(store, space=space, sender=args.sender, to=args.to, type=kind, thread=thread,
                           subject=args.subject, body=body, fields=fields, attachments=args.attach,
                           reply_to=args.reply_to, generation=args.generation, message_id=args.id,
                           self_receipt=args.self_receipt)
@@ -241,7 +244,7 @@ def cmd_receipt(args: argparse.Namespace, store: Store) -> Any:
         done = library.receipt_all_info(store, agent=args.agent, disposition=args.disposition, space=args.space)
         return {"agent": args.agent, "receipted": [r["message_id"] for r in done]}
     if not args.id:
-        raise CorreioError("give --id, or --all-info")
+        raise CourierError("give --id, or --all-info")
     return library.receipt(store, message_id=args.id, agent=args.agent, disposition=args.disposition,
                            accepted=not args.reject)
 
@@ -264,7 +267,7 @@ def cmd_inbox(args: argparse.Namespace, store: Store) -> Any:
 def cmd_show(args: argparse.Namespace, store: Store) -> Any:
     message_id = args.message_id or args.id
     if not message_id:
-        raise CorreioError("show needs a message id")
+        raise CourierError("show needs a message id")
     result = library.show(store, message_id, args.agent)
     if args.json:
         return result
@@ -327,9 +330,9 @@ def cmd_daemon(args: argparse.Namespace, store: Store) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="correio", description=__doc__,
+    parser = argparse.ArgumentParser(prog="courier", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--db", help="database path (default $CORREIO_DB or the repo key's correio.db)")
+    parser.add_argument("--db", help="database path (default $COURIER_DB or the repo key's courier.db)")
     sub = parser.add_subparsers(dest="command", required=True)
 
     space = sub.add_parser("space").add_subparsers(dest="space_command", required=True)
@@ -430,7 +433,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--out", required=True)
     p = sub.add_parser("export-v1", help="rollback: an orchestration space back into a v1 mailbox")
     p.add_argument("--space", required=True)
-    p.add_argument("--root", required=True, help="the v1 correio/ root (adds only what is missing)")
+    p.add_argument("--root", required=True, help="the v1 mailbox root (adds only what is missing)")
     p = sub.add_parser("export-jobs", help="rollback: the jobs table back into the v1 JSONL queue (merges)")
     p.add_argument("--file", required=True)
     p = sub.add_parser("import-files")
@@ -474,7 +477,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--escalate-after", type=float, default=7200.0)
     p.add_argument("--stuck-after", type=float, default=120.0)
     p.add_argument("--space", help="orchestration space for the courier's own mail")
-    p.add_argument("--watch-to", default="orquestrador")
+    p.add_argument("--watch-to", default="orchestrator")
     p.add_argument("--done-pattern", default="")
     p.add_argument("--sync-v1-root", metavar="DIR", help="while the v1 window is open, import this v1 mailbox each cycle")
     p.add_argument("--sync-v1-jobs", metavar="JSONL", help="while the v1 window is open, import this v1 queue each cycle")
@@ -482,7 +485,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="after a rollback to v1: deliver only swarm spaces, with no observers and no mail")
     p.add_argument("--readonly", default="", metavar="REGEX",
                    help="read-only (sandboxed) agents: the courier writes their copy and receipts after the prompt")
-    p.add_argument("--quiet", default="porta-voz")
+    p.add_argument("--quiet", default="spokesperson")
     p.add_argument("--watch-ref", action="append", default=[], metavar="REPO:REF")
     p.add_argument("--fetch-every", type=float, default=60.0)
     p.add_argument("--watch-runs", action="append", default=[], metavar="RUNS_DIR")
@@ -557,12 +560,12 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "export-jobs":
             result = library.export_jobs(store, args.file)
         else:
-            raise CorreioError(f"unsupported command {args.command}")
+            raise CourierError(f"unsupported command {args.command}")
         if isinstance(result, str):
             print(result)
         elif result is not None or args.command == "jobs":
             out(result)
         return 0
-    except (CorreioError, OSError, ValueError) as exc:
+    except (CourierError, OSError, ValueError) as exc:
         print(json.dumps({"error": str(exc)}, ensure_ascii=False), file=sys.stderr)
         return 2

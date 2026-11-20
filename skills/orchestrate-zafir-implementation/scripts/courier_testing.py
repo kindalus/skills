@@ -1,4 +1,4 @@
-"""Shared fixtures of the correio tests: temporary database, stepping clock, fake Herdr."""
+"""Shared fixtures of the courier tests: temporary database, stepping clock, fake Herdr."""
 from __future__ import annotations
 
 import json
@@ -9,8 +9,8 @@ import tempfile
 import unittest
 from typing import Any
 
-from correio import daemon, library
-from correio.store import Clock, Store
+from courier import daemon, library
+from courier.store import Clock, Store
 
 FAKE_HERDR = r'''#!/usr/bin/env python3
 import json, os, pathlib, sys
@@ -84,16 +84,16 @@ class FakeHerdr(daemon.Herdr):
         self.notes.append((title, body))
 
 
-class CorreioCase(unittest.TestCase):
+class CourierCase(unittest.TestCase):
     def setUp(self) -> None:
-        self.temp = pathlib.Path(tempfile.mkdtemp(prefix="correio-test-")).resolve()
+        self.temp = pathlib.Path(tempfile.mkdtemp(prefix="courier-test-")).resolve()
         self.old_env = os.environ.copy()
         os.environ.pop("HERDR_PANE_ID", None)
-        os.environ.pop("CORREIO_SPACE", None)
-        os.environ["CORREIO_HERDR"] = str(self.temp / "no-herdr")  # never the real Herdr; fake_herdr_binary sets one
-        os.environ["CORREIO_DB"] = str(self.temp / "state" / "correio.db")
+        os.environ.pop("COURIER_SPACE", None)
+        os.environ["COURIER_HERDR"] = str(self.temp / "no-herdr")  # never the real Herdr; fake_herdr_binary sets one
+        os.environ["COURIER_DB"] = str(self.temp / "state" / "courier.db")
         self.clock = StepClock()
-        self.store = Store(self.temp / "state" / "correio.db", clock=self.clock)
+        self.store = Store(self.temp / "state" / "courier.db", clock=self.clock)
 
     def tearDown(self) -> None:
         self.store.close()
@@ -101,19 +101,20 @@ class CorreioCase(unittest.TestCase):
         os.environ.update(self.old_env)
         shutil.rmtree(self.temp, ignore_errors=True)
 
-    def orchestration(self, space: str = "orq") -> str:
+    def orchestration(self, space: str = "orch", version: str = "2.0.0") -> str:
+        """An orchestration space with the team; ``version="1.0.0"`` for one created before the rename."""
         library.create_space(self.store, space_id=space, kind="orchestration", protocol="orchestration",
-                             version="1.0.0")
-        for agent, role in (("orquestrador", "orchestrator"), ("porta-voz", "spokesperson"),
-                            ("s606-preparer", "preparer"), ("consultor-claude", "consultant")):
+                             version=version)
+        for agent, role in (("orchestrator", "orchestrator"), ("spokesperson", "spokesperson"),
+                            ("s606-preparer", "preparer"), ("consultant-claude", "consultant")):
             library.add_member(self.store, space, agent, role, pane_id=f"p-{agent}")
         return space
 
     def send(self, **kwargs: Any) -> dict[str, Any]:
-        kwargs.setdefault("space", "orq")
+        kwargs.setdefault("space", "orch")
         kwargs.setdefault("thread", "S606")
         kwargs.setdefault("subject", "assunto")
-        kwargs.setdefault("type", "PEDIDO")
+        kwargs.setdefault("type", "REQUEST")
         return library.send(self.store, **kwargs)
 
     def fake_herdr_binary(self, agents: list[dict[str, Any]]) -> tuple[pathlib.Path, pathlib.Path]:
@@ -124,5 +125,5 @@ class CorreioCase(unittest.TestCase):
         state, log = self.temp / "herdr.json", self.temp / "herdr.log"
         state.write_text(json.dumps({"agents": agents}))
         log.write_text("")
-        os.environ.update(CORREIO_HERDR=str(binary), FAKE_HERDR_STATE=str(state), FAKE_HERDR_LOG=str(log))
+        os.environ.update(COURIER_HERDR=str(binary), FAKE_HERDR_STATE=str(state), FAKE_HERDR_LOG=str(log))
         return state, log

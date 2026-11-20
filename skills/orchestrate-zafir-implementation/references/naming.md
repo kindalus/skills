@@ -20,6 +20,7 @@ Because the excluded `.worktrees/` holds every live checkout, clean the main che
 | Review checkout | `.worktrees/<slice>-review-<task>-r<n>` | — (detached) | — | — | — |
 | Preparer | `.worktrees/<slice>-preparation` | `prep/<slice>` | `<slice>-preparer` | `<slice> · preparer` | workspace label and tab `<slice> · preparation`, open while the preparer works and holding its pane, so the owner can follow it |
 | Orchestrator | — | — | `orchestrator` | `orchestrator` | tab `Orchestrator` |
+| Spokesperson | — | — | `spokesperson` | `spokesperson` | a pane of tab `Orchestrator` |
 | Consultants | — | — | `consultant-claude`, `consultant-codex`, `consultant-agy` | `consultant-<cli> · free` or `consultant-<cli> · <slice>` | tab `Consultants` |
 | Bug executors | `.worktrees/bug-<id>` | `bug/<id>` | `bugs-1` … `bugs-4` | `bugs-<n> · <id>` | tab `Bugs` |
 | Batch | `.worktrees/batch-<n>` | `integ/batch-<n>` | — | — | workspace `batch-<n>`, closed at the end |

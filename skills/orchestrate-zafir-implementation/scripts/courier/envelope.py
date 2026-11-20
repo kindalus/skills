@@ -1,9 +1,9 @@
-"""Correio v2 envelope: a strict YAML-subset frontmatter plus a Markdown body.
+"""Courier v2 envelope: a strict YAML-subset frontmatter plus a Markdown body.
 
 The CLI writes every envelope; agents never type one. The subset is exactly what ``emit`` produces:
 
     ---
-    correio: 2
+    courier: 2
     id: <uuid>
     ...
     fields:
@@ -19,6 +19,9 @@ Scalars are ``null``, ``true``, ``false``, decimal integers, plain strings and d
 ``fields`` is a one-level map of scalars, ``attachments`` a list of {path, sha256, bytes} maps, and
 ``{}``/``[]`` mark them empty. ``parse`` accepts only canonical bytes: it re-emits what it read and refuses
 any difference, so the sha256 of a stored envelope is stable and every envelope has one spelling.
+
+Envelopes written before the courier's rename open with ``correio: 2`` (``LEGACY_MARKER``): ``parse`` accepts
+them and ``emit`` reproduces them byte for byte when the header carries that key, so stored mail keeps its sha256.
 """
 from __future__ import annotations
 
@@ -29,9 +32,11 @@ import uuid
 from typing import Any
 
 MAX_ENVELOPE_BYTES = 1024 * 1024
-CORREIO = 2
+COURIER = 2
 # Fixed key order of the header; ``fields`` and ``attachments`` close it.
-HEADER_KEYS = ("correio", "id", "space", "protocol", "version", "thread", "type", "from", "from_generation",
+MARKER = "courier"
+LEGACY_MARKER = "correio"
+HEADER_KEYS = (MARKER, "id", "space", "protocol", "version", "thread", "type", "from", "from_generation",
                "to", "in_reply_to", "sent_at", "subject")
 FIELD_KEY = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
 ATTACHMENT_KEYS = ("path", "sha256", "bytes")
@@ -91,14 +96,27 @@ def _read_scalar(token: str) -> Any:
     raise EnvelopeError(f"value outside the YAML subset: {token[:40]!r}")
 
 
+def header_keys(legacy: bool = False) -> tuple[str, ...]:
+    """The header keys in order; ``legacy`` for an envelope written before the rename (``correio: 2``)."""
+    return (LEGACY_MARKER, *HEADER_KEYS[1:]) if legacy else HEADER_KEYS
+
+
+def with_marker(header: dict[str, Any], marker: str) -> dict[str, Any]:
+    """``header`` with its first key spelled ``marker`` (MARKER or LEGACY_MARKER), the same value and order."""
+    value = header.get(MARKER, header.get(LEGACY_MARKER))
+    rest = {k: v for k, v in header.items() if k not in {MARKER, LEGACY_MARKER}}
+    return {marker: value, **rest}
+
+
 def emit(header: dict[str, Any], fields: dict[str, Any], attachments: list[dict[str, Any]], body: str) -> bytes:
-    """Canonical envelope bytes. ``header`` holds exactly HEADER_KEYS."""
-    if set(header) != set(HEADER_KEYS):
+    """Canonical envelope bytes. ``header`` holds exactly HEADER_KEYS (or the legacy keys of ``header_keys``)."""
+    keys = header_keys(LEGACY_MARKER in header)
+    if set(header) != set(keys):
         raise EnvelopeError(f"header keys must be exactly {HEADER_KEYS}")
     if not isinstance(body, str) or "\x00" in body:
         raise EnvelopeError("body must be text without NUL")
     lines = ["---"]
-    for key in HEADER_KEYS:
+    for key in keys:
         lines.append(f"{key}: {_scalar(header[key])}")
     if fields:
         lines.append("fields:")
@@ -164,7 +182,7 @@ def parse(data: bytes) -> dict[str, Any]:
     fields: dict[str, Any] = {}
     attachments: list[dict[str, Any]] = []
     i = 0
-    for key in HEADER_KEYS:
+    for key in header_keys(header_lines[0].startswith(f"{LEGACY_MARKER}: ")):
         if i >= len(header_lines):
             raise EnvelopeError(f"missing header key: {key}")
         k, v = _split(header_lines[i], "header")
@@ -221,8 +239,9 @@ def parse(data: bytes) -> dict[str, Any]:
 
 def validate_shape(value: dict[str, Any]) -> None:
     """Protocol-independent checks every envelope passes."""
-    if value.get("correio") != CORREIO:
-        raise EnvelopeError("correio must be 2")
+    marker = LEGACY_MARKER if LEGACY_MARKER in value else MARKER
+    if value.get(marker) != COURIER:
+        raise EnvelopeError(f"{marker} must be 2")
     try:
         if str(uuid.UUID(str(value.get("id")))) != value.get("id"):
             raise ValueError

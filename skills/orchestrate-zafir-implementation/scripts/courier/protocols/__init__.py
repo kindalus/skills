@@ -45,7 +45,7 @@ def load(name: str, version: str) -> ModuleType:
     if pinned != actual:
         raise ProtocolMissing(f"protocol {name}/{version} is not published with these bytes "
                               f"(pinned {pinned}, found {actual}); publish a new version instead of editing one")
-    spec = importlib.util.spec_from_file_location(f"correio_protocol_{name}_{version.replace('.', '_')}", path)
+    spec = importlib.util.spec_from_file_location(f"courier_protocol_{name}_{version.replace('.', '_')}", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
