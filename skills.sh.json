@@ -19,6 +19,13 @@
       ]
     },
     {
+      "title": "Harness & Terminal UI",
+      "description": "Skills defining portable terminal layouts and UX conventions for AI coding agent harnesses.",
+      "skills": [
+        "harness-status-bar"
+      ]
+    },
+    {
       "title": "ERP Integrations",
       "description": "Skills for read-only business system and ERP data access.",
       "skills": [
